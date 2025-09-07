@@ -1,44 +1,22 @@
-use axum::Json;
 use axum::{
     Router,
-    routing::{delete, get, post, put},
+    routing::{get, post},
 };
-use dirs::config_dir;
-use eyre::OptionExt;
-use luxnulla::{CONFIG_DIR, XRAY_CONFIG_FILE};
 use reqwest::Method;
-use serde_json::{Value, json};
 use std::sync::Arc;
 use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::http::handlers::groups::{
-    create_group, delete_group, get_group_by_name, get_groups, update_group,
+    create_group, delete_all_groups, delete_group, get_group_by_name, get_groups, update_group,
 };
-use crate::http::handlers::xray::{get_xray_status, toggle_xray};
-use crate::http::services::model::xray_config::XrayClientConfig;
+use crate::http::handlers::xray::{apply_outbounds, get_outbounds, get_xray_status, toggle_xray};
 use crate::services::{self};
 
 const SOCKET: &str = "0.0.0.0:3000";
 
 async fn root() -> &'static str {
     return "Server is working";
-}
-
-#[axum::debug_handler]
-async fn get_parsed_xray_configs() -> Json<Value> {
-    const URL: &str =
-        "https://raw.githubusercontent.com/barry-far/V2ray-Config/refs/heads/main/Sub1.txt";
-
-    let configs = services::xray::fetcher::get_configs(URL).await;
-
-    let configs = configs
-        .unwrap()
-        .iter()
-        .map(|config| XrayClientConfig::new(config))
-        .collect::<Vec<_>>();
-
-    Json(json!(configs))
 }
 
 pub fn init() -> tokio::task::JoinHandle<()> {
@@ -52,11 +30,11 @@ pub fn init() -> tokio::task::JoinHandle<()> {
 
         let app = Router::new()
             .route("/", get(root))
-            .route("/configs", get(get_parsed_xray_configs))
-            .route("/groups", get(get_groups))
+            .route("/groups", get(get_groups).delete(delete_all_groups))
             .route("/group", post(create_group).put(update_group))
             .route("/group/{name}", get(get_group_by_name).delete(delete_group))
             .route("/xray", get(get_xray_status))
+            .route("/xray/outbounds", get(get_outbounds).post(apply_outbounds))
             .route("/xray/{action}", post(toggle_xray))
             .with_state(storage_service_state)
             .layer(ServiceBuilder::new().layer(cors_layer));

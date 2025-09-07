@@ -1,8 +1,9 @@
 use axum::{Json, extract::Path, response::IntoResponse};
 use reqwest::StatusCode;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::services::xray;
+use crate::{http::services::model::xray_config::XrayClientOutboundConfig, services::xray};
 
 #[axum::debug_handler]
 pub async fn get_xray_status() -> impl IntoResponse {
@@ -51,4 +52,49 @@ pub async fn toggle_xray(Path(action): Path<String>) -> impl IntoResponse {
     };
 
     response.into_response()
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct UseLuxnullaConfig {
+    payload: Vec<XrayClientOutboundConfig>,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct UseLuxnullaConfigResponse {
+    configs: Vec<XrayClientOutboundConfig>,
+}
+
+#[axum::debug_handler]
+pub async fn get_outbounds() -> impl IntoResponse {
+    match xray::outbounds::get_outbounds() {
+        Ok(configs) => (
+            StatusCode::OK,
+            Json(UseLuxnullaConfigResponse { configs: configs }),
+        )
+            .into_response(),
+        Err(err) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("Failed to get config: {}", err)})),
+        )
+            .into_response(),
+    }
+}
+
+#[axum::debug_handler]
+pub async fn apply_outbounds(Json(req): Json<UseLuxnullaConfig>) -> impl IntoResponse {
+    match xray::outbounds::update_outbounds(&req.payload) {
+        Ok(configs) => match xray::restart_xray().await {
+            Ok(_) => (StatusCode::OK, Json(json!(configs))),
+            Err(err) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to restart Xray: {}", err)})),
+            ),
+        }
+        .into_response(),
+        Err(err) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("Failed to use config: {}", err)})),
+        )
+            .into_response(),
+    }
 }

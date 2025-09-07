@@ -205,14 +205,34 @@ impl StorageService {
     }
 
     pub fn delete_group(&self, name: &str) -> Result<bool, StorageError> {
-        let result = {
-            let mut groups = self.groups.write().map_err(|_| StorageError::LockError)?;
-            groups.remove(name).is_some()
-        };
+        let result = self
+            .groups
+            .write()
+            .map_err(|_| StorageError::LockError)?
+            .remove(name)
+            .is_some();
+
         if result {
             self.delete_group_file(name)?;
         }
         Ok(result)
+    }
+
+    pub fn delete_all_group(&self) -> Result<(), StorageError> {
+        let group_names: Vec<String> = {
+            let groups_read = self.groups.read().map_err(|_| StorageError::LockError)?;
+            groups_read.keys().cloned().collect()
+        };
+
+        for name in group_names {
+            self.delete_group_file(&name)?;
+        }
+
+        {
+            self.groups.write().unwrap().clear();
+        }
+
+        Ok(())
     }
 
     pub fn delete_group_file(&self, group_name: &str) -> Result<(), StorageError> {
@@ -252,15 +272,6 @@ impl StorageService {
         Ok(existed)
     }
 
-    pub fn clear_all_groups(&self) -> Result<(), StorageError> {
-        {
-            let mut groups = self.groups.write().map_err(|_| StorageError::LockError)?;
-            groups.clear();
-        }
-        self.clear_all_group_files()?;
-        Ok(())
-    }
-
     pub fn save_group_to_file(&self, group_name: &str) -> Result<(), StorageError> {
         let groups = self.groups.read().map_err(|_| StorageError::LockError)?;
 
@@ -282,25 +293,6 @@ impl StorageService {
             }
             None => Err(StorageError::GroupNotFound(group_name.to_string())),
         }
-    }
-
-    pub fn clear_all_group_files(&self) -> Result<(), StorageError> {
-        if let Some(ref groups_dir) = self.groups_dir {
-            let dir_path = Path::new(groups_dir);
-            if dir_path.exists() {
-                for entry in
-                    fs::read_dir(dir_path).map_err(|e| StorageError::FileError(e.to_string()))?
-                {
-                    let entry = entry.map_err(|e| StorageError::FileError(e.to_string()))?;
-                    let path = entry.path();
-                    if path.is_file() && path.extension().map_or(false, |ext| ext == "json") {
-                        fs::remove_file(path)
-                            .map_err(|e| StorageError::FileError(e.to_string()))?;
-                    }
-                }
-            }
-        }
-        Ok(())
     }
 }
 

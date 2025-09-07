@@ -1,6 +1,5 @@
 use crate::{
-    common::parsers::proxy_config::{self, ProxyConfig},
-    services::{Group, StorageService, xray::fetcher::get_configs},
+    common::parsers::proxy_config::{self, ProxyConfig}, http::services::model::xray_config::XrayClientOutboundConfig, services::{xray::fetcher::get_configs, Group, StorageService}
 };
 use axum::{
     Json,
@@ -35,12 +34,19 @@ fn determine_config_type(config: &str) -> Result<ConfigType, std::io::Error> {
     }
 }
 
-async fn process_config(payload: &str) -> Result<Vec<ProxyConfig>, std::io::Error> {
+async fn process_config(payload: &str) -> Result<Vec<XrayClientOutboundConfig>, std::io::Error> {
     match determine_config_type(payload)? {
         ConfigType::RAW => {
             if let Ok(_) = Url::parse(&payload) {
                 match proxy_config::work(&payload) {
-                    Ok(work_result) => Ok(work_result),
+                    Ok(configs) => {
+                        let configs = configs
+                            .iter()
+                            .map(|config| XrayClientOutboundConfig::new(config))
+                            .collect::<Vec<_>>();
+
+                        Ok(configs)
+                    },
                     Err(_) => Err(std::io::Error::new(
                         std::io::ErrorKind::Other,
                         "Failed to perform work with config",
@@ -59,7 +65,14 @@ async fn process_config(payload: &str) -> Result<Vec<ProxyConfig>, std::io::Erro
             if let Ok(config) = raw_config {
                 if let Ok(_) = Url::parse(&config) {
                     match proxy_config::work(&config) {
-                        Ok(work_result) => Ok(work_result),
+                        Ok(configs) => {
+                            let configs = configs
+                                .iter()
+                                .map(|config| XrayClientOutboundConfig::new(config))
+                                .collect::<Vec<_>>();
+
+                            Ok(configs)
+                        },
                         Err(_) => Err(std::io::Error::new(
                             std::io::ErrorKind::Other,
                             "Failed to perform work with config",
@@ -79,7 +92,14 @@ async fn process_config(payload: &str) -> Result<Vec<ProxyConfig>, std::io::Erro
             }
         }
         ConfigType::URL => match get_configs(payload).await {
-            Ok(configs) => Ok(configs),
+            Ok(configs) => {
+                let configs = configs
+                    .iter()
+                    .map(|config| XrayClientOutboundConfig::new(config))
+                    .collect::<Vec<_>>();
+
+                Ok(configs)
+            },
             Err(_) => Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 "Failed to fetch configs",
@@ -100,6 +120,7 @@ pub struct CreateGroupResponse {
     configs: Value,
 }
 
+//todo add if group is exist
 #[axum::debug_handler]
 pub async fn create_group(
     State(storage): State<Arc<StorageService>>,
@@ -230,6 +251,23 @@ pub async fn get_group_by_name(
 ) -> impl IntoResponse {
     match storage.get_group(&name) {
         Ok(group) => (StatusCode::OK, Json(json!(group))).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "error": "Failed to retrieve groups",
+                "details": e.to_string()
+            })),
+        )
+            .into_response(),
+    }
+}
+
+#[axum::debug_handler]
+pub async fn delete_all_groups(
+    State(storage): State<Arc<StorageService>>
+) -> impl IntoResponse {
+    match storage.delete_all_group() {
+        Ok(_) => (StatusCode::OK).into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({

@@ -42,11 +42,28 @@ pub struct StreamSettings {
     pub security: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct XrayClientConfig {
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct MuxSettings {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enable: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub concurrency: Option<RealitySettings>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub xudp_concurrency: Option<RealitySettings>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub xudp_proxy_udp443: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct XrayClientOutboundConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tag: Option<String>,
     pub protocol: String,
     pub settings: Settings,
-    pub stream: StreamSettings,
+    #[serde(rename(serialize = "streamSettings", deserialize = "streamSettings"))]
+    pub stream_settings: StreamSettings,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub name_client: Option<String>,
+    pub mux: Option<MuxSettings>,
+    // #[serde(skip_serializing_if = "Option::is_none")]
+    // pub name_client: Option<String>,
 }
