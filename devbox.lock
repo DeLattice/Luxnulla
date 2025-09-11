@@ -5,6 +5,118 @@
       "last_modified": "2025-08-25T13:28:40Z",
       "resolved": "github:NixOS/nixpkgs/c53baa6685261e5253a1c355a1b322f82674a824?lastModified=1756128520&narHash=sha256-R94HxJBi%2BRK1iCm8Y4Q9pdrHZl0GZoDPIaYwjxRNPh4%3D"
     },
+    "nix-ld@latest": {
+      "last_modified": "2025-07-28T17:09:23Z",
+      "resolved": "github:NixOS/nixpkgs/648f70160c03151bc2121d179291337ad6bc564b#nix-ld",
+      "source": "devbox-search",
+      "version": "2.0.5",
+      "systems": {
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/b5ialc5ydrv78007wn7q19gnyzgyl7ih-nix-ld-2.0.5",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/b5ialc5ydrv78007wn7q19gnyzgyl7ih-nix-ld-2.0.5"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/8h808ksjxw8602jsdbk3rcvbpn9ri9kh-nix-ld-2.0.5",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/8h808ksjxw8602jsdbk3rcvbpn9ri9kh-nix-ld-2.0.5"
+        }
+      }
+    },
+    "pkg-config@latest": {
+      "last_modified": "2025-07-28T17:09:23Z",
+      "resolved": "github:NixOS/nixpkgs/648f70160c03151bc2121d179291337ad6bc564b#pkg-config",
+      "source": "devbox-search",
+      "version": "0.29.2",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/wj9343rwp0vx0cy4dpl89gavk4pdja55-pkg-config-wrapper-0.29.2",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/a30b0ccp4b58mhc48afy9a02k45b2f9n-pkg-config-wrapper-0.29.2-man",
+              "default": true
+            },
+            {
+              "name": "doc",
+              "path": "/nix/store/xdfqjgw4azgb9bsn53dhrqwid9h15d31-pkg-config-wrapper-0.29.2-doc"
+            }
+          ],
+          "store_path": "/nix/store/wj9343rwp0vx0cy4dpl89gavk4pdja55-pkg-config-wrapper-0.29.2"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/vn90s8p77jf7iwaq1m81lqha8cs2wpk5-pkg-config-wrapper-0.29.2",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/vxxpa12ajsdk4r2gk01548r0ygw2n01x-pkg-config-wrapper-0.29.2-man",
+              "default": true
+            },
+            {
+              "name": "doc",
+              "path": "/nix/store/h1x5m04ays3fg1xacspi43q7ia52lbkx-pkg-config-wrapper-0.29.2-doc"
+            }
+          ],
+          "store_path": "/nix/store/vn90s8p77jf7iwaq1m81lqha8cs2wpk5-pkg-config-wrapper-0.29.2"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/37gxv08h7bn7y58ziw5ni3bqzwfr04a1-pkg-config-wrapper-0.29.2",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/128yhvs3sg0bxhsxl0rgbczjgp10kdrq-pkg-config-wrapper-0.29.2-man",
+              "default": true
+            },
+            {
+              "name": "doc",
+              "path": "/nix/store/n8h1bww0jlna6ycxvfig97fh6gjs83wv-pkg-config-wrapper-0.29.2-doc"
+            }
+          ],
+          "store_path": "/nix/store/37gxv08h7bn7y58ziw5ni3bqzwfr04a1-pkg-config-wrapper-0.29.2"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/7vrzhnby95407cbbahn3fj3y98qifgby-pkg-config-wrapper-0.29.2",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/l23dn1jdzr58srzbcv2a0my0ilxx713z-pkg-config-wrapper-0.29.2-man",
+              "default": true
+            },
+            {
+              "name": "doc",
+              "path": "/nix/store/kyppfi30wm5sfhnkwz1pr5nnlqpis2wa-pkg-config-wrapper-0.29.2-doc"
+            }
+          ],
+          "store_path": "/nix/store/7vrzhnby95407cbbahn3fj3y98qifgby-pkg-config-wrapper-0.29.2"
+        }
+      }
+    },
     "rustup@latest": {
       "last_modified": "2025-07-28T17:09:23Z",
       "plugin_version": "0.0.1",
@@ -51,6 +163,130 @@
             }
           ],
           "store_path": "/nix/store/4z7n3dky3wmx7130rid6c67ra1ipqhn1-rustup-1.28.2"
+        }
+      }
+    },
+    "sqlite@latest": {
+      "last_modified": "2025-08-11T16:06:55Z",
+      "resolved": "github:NixOS/nixpkgs/4e942f9ef5b35526597c354d1ded817d1c285ef1#sqlite",
+      "source": "devbox-search",
+      "version": "3.50.2",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "bin",
+              "path": "/nix/store/35z7rb3gd23yfcgfssy8g7qw3dpd7q9p-sqlite-3.50.2-bin",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/fvl0bgzn40x7qlzmhb148aqmr9k3inx3-sqlite-3.50.2-man",
+              "default": true
+            },
+            {
+              "name": "dev",
+              "path": "/nix/store/fnwnbb72xsrx67hlq995yrsliwpl08pl-sqlite-3.50.2-dev"
+            },
+            {
+              "name": "doc",
+              "path": "/nix/store/bbg63w1qynzsvvlzhl7rig9409vvrdqq-sqlite-3.50.2-doc"
+            },
+            {
+              "name": "out",
+              "path": "/nix/store/73iiazjcn1qscb8m0l5f3jg56vjgwxbj-sqlite-3.50.2"
+            }
+          ],
+          "store_path": "/nix/store/35z7rb3gd23yfcgfssy8g7qw3dpd7q9p-sqlite-3.50.2-bin"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "bin",
+              "path": "/nix/store/xra4yp1wl7kk5yrql2ksa28pyhgv05bh-sqlite-3.50.2-bin",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/f434igy35argvb4ia067612g8lgamj9h-sqlite-3.50.2-man",
+              "default": true
+            },
+            {
+              "name": "dev",
+              "path": "/nix/store/bllx9j696dahs4xz2942lmbab7bain1w-sqlite-3.50.2-dev"
+            },
+            {
+              "name": "doc",
+              "path": "/nix/store/hdb7kzmd4d3arn8qc3n02zb2afhz01bk-sqlite-3.50.2-doc"
+            },
+            {
+              "name": "out",
+              "path": "/nix/store/hkapr9yav6nx45h1gizasd80gkqv3rqd-sqlite-3.50.2"
+            },
+            {
+              "name": "debug",
+              "path": "/nix/store/y78vmjc4dvqg52gy2y03yy43kmm4l5xy-sqlite-3.50.2-debug"
+            }
+          ],
+          "store_path": "/nix/store/xra4yp1wl7kk5yrql2ksa28pyhgv05bh-sqlite-3.50.2-bin"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "bin",
+              "path": "/nix/store/5wm8hlhk48q6yliym7nfgpa1ijfphs2l-sqlite-3.50.2-bin",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/zra5y09sdp0vvsynaj0mv6pl0n9x3kil-sqlite-3.50.2-man",
+              "default": true
+            },
+            {
+              "name": "doc",
+              "path": "/nix/store/3y1wdididszk73lxk2d2h753llrl18ns-sqlite-3.50.2-doc"
+            },
+            {
+              "name": "out",
+              "path": "/nix/store/qgbjr35s6r2mr4i37qpkb70wqfiwslh3-sqlite-3.50.2"
+            },
+            {
+              "name": "dev",
+              "path": "/nix/store/fi2fi6q7yqpgwa6z14xnqx00pq9s6h92-sqlite-3.50.2-dev"
+            }
+          ],
+          "store_path": "/nix/store/5wm8hlhk48q6yliym7nfgpa1ijfphs2l-sqlite-3.50.2-bin"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "bin",
+              "path": "/nix/store/davps0p09b6kswdnjm3mscfk5g25cvaf-sqlite-3.50.2-bin",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/p0pcmmzd168kdpl01lnp3qi17m7y2iwv-sqlite-3.50.2-man",
+              "default": true
+            },
+            {
+              "name": "debug",
+              "path": "/nix/store/18l20nnx9pfixq0w29alajkgncvlz8qw-sqlite-3.50.2-debug"
+            },
+            {
+              "name": "dev",
+              "path": "/nix/store/jmqk9474xmakj7s663kbinp7bn959kr1-sqlite-3.50.2-dev"
+            },
+            {
+              "name": "doc",
+              "path": "/nix/store/fanxdjifxzjrs8zhi0qg9ifd0mqir4rf-sqlite-3.50.2-doc"
+            },
+            {
+              "name": "out",
+              "path": "/nix/store/yd47pmkv6iv58gs5v5jgyblvkw87pqx3-sqlite-3.50.2"
+            }
+          ],
+          "store_path": "/nix/store/davps0p09b6kswdnjm3mscfk5g25cvaf-sqlite-3.50.2-bin"
         }
       }
     },

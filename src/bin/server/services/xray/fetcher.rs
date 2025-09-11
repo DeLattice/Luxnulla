@@ -4,8 +4,6 @@ use crate::common::{
 };
 
 pub async fn get_configs(url: &str) -> Result<Vec<ProxyConfig>, Box<dyn std::error::Error>> {
-    println!("--- Fetching from plain text URL: {} ---", url);
-
     let body = match fetchers::config::fetch(url).await {
         Ok(body) => body,
         Err(e) => {

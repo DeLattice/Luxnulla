@@ -1,11 +1,10 @@
 use crate::{
-    common::parsers::proxy_config::{self, ProxyConfig}, http::services::model::xray_config::XrayClientOutboundConfig, services::{xray::fetcher::get_configs, Group, StorageService}
+    common::parsers::proxy_config::{self},
+    http::services::model::xray_config::XrayClientOutboundConfig,
+    services::{common::paginator::PaginationParams, xray::fetcher::get_configs, Group, StorageService},
 };
 use axum::{
-    Json,
-    extract::{Path, State},
-    http::StatusCode,
-    response::IntoResponse,
+    extract::{Path, Query, State}, http::StatusCode, response::IntoResponse, Json
 };
 use base64::{Engine, prelude::BASE64_STANDARD};
 use serde::{Deserialize, Serialize};
@@ -46,7 +45,7 @@ async fn process_config(payload: &str) -> Result<Vec<XrayClientOutboundConfig>, 
                             .collect::<Vec<_>>();
 
                         Ok(configs)
-                    },
+                    }
                     Err(_) => Err(std::io::Error::new(
                         std::io::ErrorKind::Other,
                         "Failed to perform work with config",
@@ -72,7 +71,7 @@ async fn process_config(payload: &str) -> Result<Vec<XrayClientOutboundConfig>, 
                                 .collect::<Vec<_>>();
 
                             Ok(configs)
-                        },
+                        }
                         Err(_) => Err(std::io::Error::new(
                             std::io::ErrorKind::Other,
                             "Failed to perform work with config",
@@ -99,7 +98,7 @@ async fn process_config(payload: &str) -> Result<Vec<XrayClientOutboundConfig>, 
                     .collect::<Vec<_>>();
 
                 Ok(configs)
-            },
+            }
             Err(_) => Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 "Failed to fetch configs",
@@ -120,14 +119,12 @@ pub struct CreateGroupResponse {
     configs: Value,
 }
 
-//todo add if group is exist
-#[axum::debug_handler]
 pub async fn create_group(
     State(storage): State<Arc<StorageService>>,
     Json(req): Json<CreateGroup>,
 ) -> impl IntoResponse {
-    let decoded_config = match process_config(&req.payload).await {
-        Ok(config) => config,
+    let decoded_configs = match process_config(&req.payload).await {
+        Ok(configs) => configs,
         Err(e) => {
             return (
                 StatusCode::BAD_REQUEST,
@@ -140,17 +137,10 @@ pub async fn create_group(
         }
     };
 
-    let group = Group::new(req.name.clone(), json!(decoded_config));
+    let group = Group::new(req.name.clone(), decoded_configs);
 
     match storage.store_group(group) {
-        Ok(()) => (
-            StatusCode::CREATED,
-            Json(CreateGroupResponse {
-                name: req.name,
-                configs: json!(decoded_config),
-            }),
-        )
-            .into_response(),
+        Ok(()) => StatusCode::CREATED.into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({
@@ -162,14 +152,36 @@ pub async fn create_group(
     }
 }
 
-#[axum::debug_handler]
-pub async fn get_groups(State(storage): State<Arc<StorageService>>) -> impl IntoResponse {
+pub async fn get_all_groups(State(storage): State<Arc<StorageService>>) -> impl IntoResponse {
     match storage.get_all_groups() {
         Ok(groups) => (
             StatusCode::OK,
             Json(json!({
-                "groups": groups,
-                "count": groups.len()
+                "groups": groups
+            })),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "error": "Failed to retrieve groups",
+                "details": e.to_string()
+            })),
+        )
+            .into_response(),
+    }
+}
+
+pub async fn get_paginated_group_configs(
+    State(storage): State<Arc<StorageService>>,
+    Path(group_name): Path<String>,
+    Query(pagination): Query<PaginationParams>,
+) -> impl IntoResponse {
+    match storage.get_paginated_group_configs(&group_name, &pagination) {
+        Ok(groups) => (
+            StatusCode::OK,
+            Json(json!({
+                "groups": groups
             })),
         )
             .into_response(),
@@ -187,13 +199,13 @@ pub async fn get_groups(State(storage): State<Arc<StorageService>>) -> impl Into
 #[derive(Deserialize, Serialize, Debug)]
 pub struct UpdateGroup {
     name: String,
-    payload: Value,
+    payload: Vec<XrayClientOutboundConfig>,
 }
 
 #[derive(Deserialize, Serialize)]
 pub struct UpdateGroupResponse {
     name: String,
-    configs: Value,
+    configs: Vec<XrayClientOutboundConfig>,
 }
 
 #[axum::debug_handler]
@@ -201,16 +213,14 @@ pub async fn update_group(
     State(storage): State<Arc<StorageService>>,
     Json(req): Json<UpdateGroup>,
 ) -> impl IntoResponse {
-    let new_configs = serde_json::to_value(req.payload).unwrap();
-
-    let group = Group::new(req.name.clone(), new_configs.clone());
+    let group = Group::new(req.name.clone(), req.payload.clone());
 
     match storage.update_group_config(group) {
         Ok(_) => (
             StatusCode::OK,
             Json(UpdateGroupResponse {
                 name: req.name,
-                configs: new_configs,
+                configs: req.payload,
             }),
         )
             .into_response(),
@@ -225,7 +235,6 @@ pub async fn update_group(
     }
 }
 
-//todo add if group is exist
 #[axum::debug_handler]
 pub async fn delete_group(
     State(storage): State<Arc<StorageService>>,
@@ -263,9 +272,7 @@ pub async fn get_group_by_name(
 }
 
 #[axum::debug_handler]
-pub async fn delete_all_groups(
-    State(storage): State<Arc<StorageService>>
-) -> impl IntoResponse {
+pub async fn delete_all_groups(State(storage): State<Arc<StorageService>>) -> impl IntoResponse {
     match storage.delete_all_group() {
         Ok(_) => (StatusCode::OK).into_response(),
         Err(e) => (

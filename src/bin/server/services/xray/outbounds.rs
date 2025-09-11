@@ -43,7 +43,6 @@ struct XrayFileCore {
 impl XrayFileCore {
     pub fn new() -> Self {
         let config_dir_path = dirs::config_dir().unwrap().join(CONFIG_DIR);
-
         let xray_config_path = config_dir_path.join(XRAY_CONFIG_FILE);
 
         XrayFileCore {

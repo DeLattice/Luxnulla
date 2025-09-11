@@ -1,8 +1,14 @@
 {
-  "packages": [
-    "rustup@latest",
-    "xray@latest"
-  ],
+  "packages": {
+    "rustup": "latest",
+    "xray":   "latest",
+    "sqlite": {
+      "version": "latest",
+      "outputs": ["out"]
+    },
+    "pkg-config": "latest",
+    "nix-ld":     "latest"
+  },
   "shell": {
     "init_hook": [
       "rustup default nightly",
