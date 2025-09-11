@@ -54,22 +54,12 @@ pub async fn toggle_xray(Path(action): Path<String>) -> impl IntoResponse {
     response.into_response()
 }
 
-#[derive(Deserialize, Serialize)]
-pub struct UseLuxnullaConfig {
-    payload: Vec<XrayClientOutboundConfig>,
-}
-
-#[derive(Deserialize, Serialize)]
-pub struct UseLuxnullaConfigResponse {
-    configs: Vec<XrayClientOutboundConfig>,
-}
-
 #[axum::debug_handler]
 pub async fn get_outbounds() -> impl IntoResponse {
     match xray::outbounds::get_outbounds() {
         Ok(configs) => (
             StatusCode::OK,
-            Json(UseLuxnullaConfigResponse { configs: configs }),
+            Json(configs),
         )
             .into_response(),
         Err(err) => (
@@ -81,8 +71,8 @@ pub async fn get_outbounds() -> impl IntoResponse {
 }
 
 #[axum::debug_handler]
-pub async fn apply_outbounds(Json(req): Json<UseLuxnullaConfig>) -> impl IntoResponse {
-    match xray::outbounds::update_outbounds(&req.payload) {
+pub async fn apply_outbounds(Json(req): Json<Vec<XrayClientOutboundConfig>>) -> impl IntoResponse {
+    match xray::outbounds::update_outbounds(&req) {
         Ok(configs) => match xray::restart_xray().await {
             Ok(_) => (StatusCode::OK, Json(json!(configs))),
             Err(err) => (

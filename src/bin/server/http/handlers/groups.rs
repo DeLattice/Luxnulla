@@ -181,7 +181,7 @@ pub async fn get_paginated_group_configs(
         Ok(groups) => (
             StatusCode::OK,
             Json(json!({
-                "groups": groups
+                "configs": groups.unwrap().configs
             })),
         )
             .into_response(),

@@ -221,6 +221,10 @@ impl Parser for Vless {
 
         let name_client = url.fragment().map(|s| s.to_string());
 
+        let encryption= query.get("encryption")
+            .map(|s| s.to_string())
+            .or_else(|| Some("none".to_string()));
+
         let reality_settings = if let (Some(pbk), Some(sni), Some(sid)) =
             (query.get("pbk"), query.get("sni"), query.get("sid"))
         {
@@ -242,7 +246,7 @@ impl Parser for Vless {
         let config = Vless {
             user: User {
                 id: Some(user_id),
-                encryption: query.get("encryption").cloned(),
+                encryption: encryption,
             },
             address,
             port,

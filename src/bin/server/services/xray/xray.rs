@@ -1,8 +1,9 @@
 use anyhow::{Context, Result};
 use dirs::config_dir;
 use luxnulla::{CONFIG_DIR, XRAY_CONFIG_FILE};
-use std::sync::Mutex;
+use std::{sync::Mutex};
 use tokio::process::{Child, Command};
+use anyhow::anyhow;
 
 static XRAY_CHILD: Mutex<Option<Child>> = Mutex::new(None);
 
@@ -65,11 +66,8 @@ pub async fn stop_xray() -> Result<(), Box<dyn std::error::Error + Send + Sync>>
     }
 }
 
-pub async fn restart_xray() -> Result<()> {
-    stop_xray().await;
-    start_xray()
-        .await
-        .context("Failed to start Xray after a restart attempt")?;
-    println!("Xray restarted successfully.");
+pub async fn restart_xray() -> Result<(), anyhow::Error> {
+    stop_xray().await.map_err(|e| anyhow!("Failed to stop Xray: {}", e))?;
+    start_xray().await?;
     Ok(())
 }

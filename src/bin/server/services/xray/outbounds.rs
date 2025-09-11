@@ -36,6 +36,9 @@ pub struct PartialXraySettingsFile {
 
 #[derive(Debug, Deserialize)]
 struct XrayFileCore {
+    // log: todo!(),
+    // dns: todo!(),
+    // routing: todo!(),
     // inbounds: todo!(),
     pub xray_config_path: PathBuf,
 }
