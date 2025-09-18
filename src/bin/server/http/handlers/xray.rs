@@ -1,9 +1,8 @@
 use axum::{Json, extract::Path, response::IntoResponse};
 use reqwest::StatusCode;
-use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::{http::services::model::xray_config::XrayClientOutboundConfig, services::xray};
+use crate::{http::services::model::xray_config::XrayOutboundClientConfig, services::xray};
 
 #[axum::debug_handler]
 pub async fn get_xray_status() -> impl IntoResponse {
@@ -71,7 +70,7 @@ pub async fn get_outbounds() -> impl IntoResponse {
 }
 
 #[axum::debug_handler]
-pub async fn apply_outbounds(Json(req): Json<Vec<XrayClientOutboundConfig>>) -> impl IntoResponse {
+pub async fn apply_outbounds(Json(req): Json<Vec<XrayOutboundClientConfig>>) -> impl IntoResponse {
     match xray::outbounds::update_outbounds(&req) {
         Ok(configs) => match xray::restart_xray().await {
             Ok(_) => (StatusCode::OK, Json(json!(configs))),
@@ -87,4 +86,13 @@ pub async fn apply_outbounds(Json(req): Json<Vec<XrayClientOutboundConfig>>) -> 
         )
             .into_response(),
     }
+}
+
+#[axum::debug_handler]
+pub async fn check_configs(
+    Json(req): Json<Vec<XrayOutboundClientConfig>>
+) -> impl IntoResponse {
+    xray::checker::ping(req);
+
+    StatusCode::OK
 }

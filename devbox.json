@@ -7,7 +7,9 @@
       "outputs": ["out"]
     },
     "pkg-config": "latest",
-    "nix-ld":     "latest"
+    "nix-ld":     "latest",
+    "sql-studio": "latest",
+    "firejail":   "latest"
   },
   "shell": {
     "init_hook": [
@@ -15,7 +17,9 @@
       "cargo fetch"
     ],
     "scripts": {
-      "server": "cargo run --bin server"
+      "server": "RUSTFLAGS=-Awarnings cargo run --bin server",
+      "zed": "zeditor .",
+      "sqlite": "sql-studio sqlite $HOME/.config/luxnulla/storage.db"
     }
   }
 }

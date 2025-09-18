@@ -7,11 +7,14 @@ use std::sync::Arc;
 use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
 
-use crate::http::handlers::groups::{
-    create_group, delete_all_groups, delete_group, get_all_groups, get_paginated_group_configs,
-    get_group_by_name, update_group,
-};
 use crate::http::handlers::xray::{apply_outbounds, get_outbounds, get_xray_status, toggle_xray};
+use crate::http::handlers::{
+    groups::{
+        create_group, delete_all_groups, delete_group, get_group_by_name, get_list_group_names,
+        get_paginated_group_configs, update_group,
+    },
+    xray::check_configs,
+};
 use crate::services::{self};
 
 const SOCKET: &str = "0.0.0.0:3000";
@@ -33,29 +36,28 @@ pub fn init() -> tokio::task::JoinHandle<()> {
             .route("/", get(root))
             .nest(
                 "/groups",
-                Router::new().route("/", get(get_all_groups).delete(delete_all_groups)),
-            )
-            .nest(
-                "/group",
                 Router::new()
-                    .route(
-                        "/",
-                        get(get_group_by_name)
-                            .post(create_group)
-                            .put(update_group)
-                            .delete(delete_group),
-                    )
                     .nest(
                         "/{name}",
-                        Router::new().route("/configs", get(get_paginated_group_configs)),
-                    ),
+                        Router::new()
+                            .route(
+                                "/",
+                                get(get_group_by_name)
+                                    .post(create_group)
+                                    .put(update_group)
+                                    .delete(delete_group),
+                            )
+                            .route("/configs", get(get_paginated_group_configs)),
+                    )
+                    .route("/", get(get_list_group_names).delete(delete_all_groups)),
             )
             .nest(
                 "/xray",
                 Router::new()
                     .route("/", get(get_xray_status))
                     .route("/outbounds", get(get_outbounds).post(apply_outbounds))
-                    .route("/{action}", post(toggle_xray)),
+                    .route("/{action}", post(toggle_xray))
+                    .route("/ping", post(check_configs)),
             )
             .with_state(storage_service_state)
             .layer(ServiceBuilder::new().layer(cors_layer));
