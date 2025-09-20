@@ -1,13 +1,25 @@
 use base64::{Engine, prelude::BASE64_STANDARD};
-use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::{common::parsers::protocols::vless::Vless, http::services::model::xray_config::{GRPCSettings, RealitySettings, User}};
+use crate::common::parsers::protocols::{ss::Shadowsocks, vless::Vless};
 
 #[derive(Debug)]
 pub enum ParseError {
+    InvalidFormat(String),
     FieldMissing(String),
+    Base64DecodeError(base64::DecodeError),
+    Utf8Error(std::string::FromUtf8Error),
     UnknownFieldType { current: String, expected: String },
+}
+impl From<base64::DecodeError> for ParseError {
+    fn from(err: base64::DecodeError) -> Self {
+        ParseError::Base64DecodeError(err)
+    }
+}
+impl From<std::string::FromUtf8Error> for ParseError {
+    fn from(err: std::string::FromUtf8Error) -> Self {
+        ParseError::Utf8Error(err)
+    }
 }
 
 impl std::fmt::Display for ParseError {
@@ -15,10 +27,13 @@ impl std::fmt::Display for ParseError {
         match self {
             ParseError::FieldMissing(field) => write!(f, "Missing field: {}", field),
             ParseError::UnknownFieldType { current, expected } => write!(
-                f,
-                "Unknown field type: {} (expected: {})",
-                current, expected
-            ),
+                        f,
+                        "Unknown field type: {} (expected: {})",
+                        current, expected
+                    ),
+            ParseError::Base64DecodeError(err) => write!(f, "Failed to decode base64: {}", err),
+            ParseError::Utf8Error(err) => write!(f, "Failed to decode UTF-8: {}", err),
+            ParseError::InvalidFormat(err) => write!(f, "Invalid format: {}", err),
         }
     }
 }
@@ -32,79 +47,39 @@ where
     fn parse(url: &Url) -> Result<Self, ParseError>;
 }
 
-pub trait ClientConfigAccessor {
-    fn user(&self) -> Option<&User>;
+pub enum OutboundClientConfig {
+    Vless(Vless),
+    Shadowsocks(Shadowsocks),
+}
+
+pub trait ClientConfigCommon {
     fn address(&self) -> &str;
     fn port(&self) -> u16;
     fn protocol(&self) -> &'static str;
-    fn name(&self) -> Option<&str>;
-    fn security(&self) -> Option<&str>;
-    fn network(&self) -> Option<&str>;
-    fn reality_settings(&self) -> Option<&RealitySettings>;
-    fn grpc_settings(&self) -> Option<&GRPCSettings>;
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-pub enum OutboundClientConfig {
-    Vless(Vless),
-}
-
-impl ClientConfigAccessor for OutboundClientConfig {
-    fn user(&self) -> Option<&User> {
-        match self {
-            OutboundClientConfig::Vless(vless) => vless.user(),
-        }
-    }
-
+impl ClientConfigCommon for OutboundClientConfig {
     fn address(&self) -> &str {
         match self {
-            OutboundClientConfig::Vless(vless) => vless.address(),
+            OutboundClientConfig::Vless(vless_config) => vless_config.address(),
+            OutboundClientConfig::Shadowsocks(shadowsocks_config) => shadowsocks_config.address(),
         }
     }
 
     fn port(&self) -> u16 {
         match self {
-            OutboundClientConfig::Vless(vless) => vless.port(),
+            OutboundClientConfig::Vless(vless_config) => vless_config.port(),
+            OutboundClientConfig::Shadowsocks(shadowsocks_config) => shadowsocks_config.port(),
         }
     }
 
     fn protocol(&self) -> &'static str {
         match self {
             OutboundClientConfig::Vless(vless) => vless.protocol(),
-        }
-    }
-
-    fn name(&self) -> Option<&str> {
-        match self {
-            OutboundClientConfig::Vless(vless) => vless.name(),
-        }
-    }
-
-    fn security(&self) -> Option<&str> {
-        match self {
-            OutboundClientConfig::Vless(vless) => vless.security(),
-        }
-    }
-
-    fn network(&self) -> Option<&str> {
-        match self {
-            OutboundClientConfig::Vless(vless) => vless.network(),
-        }
-    }
-
-    fn reality_settings(&self) -> Option<&RealitySettings> {
-        match self {
-            OutboundClientConfig::Vless(vless) => vless.reality_settings(),
-        }
-    }
-
-    fn grpc_settings(&self) -> Option<&GRPCSettings> {
-        match self {
-            OutboundClientConfig::Vless(vless) => vless.grpc_settings(),
+            OutboundClientConfig::Shadowsocks(ss) => ss.protocol(),
         }
     }
 }
-
 
 // example (reality vless grpc) config
 // vless://
@@ -123,7 +98,6 @@ impl ClientConfigAccessor for OutboundClientConfig {
 // &mode=gun
 // &fp=chrome
 // #%F0%9F%9A%80%20Marz%20%28igni_laptop_grpc_reality_flow%29%20%5BVLESS%20-%20grpc%5D
-
 
 pub fn decode_config_from_base64(
     payload: &str,
@@ -155,6 +129,9 @@ fn parse_line(url: Url) -> Result<OutboundClientConfig, String> {
     match url.scheme() {
         "vless" => Vless::parse(&url)
             .map(OutboundClientConfig::Vless)
+            .map_err(|err| format!("{}", err)),
+        "ss" => Shadowsocks::parse(&url)
+            .map(OutboundClientConfig::Shadowsocks)
             .map_err(|err| format!("{}", err)),
         other => Err(format!("unknown url scheme: \"{other}\"")),
     }

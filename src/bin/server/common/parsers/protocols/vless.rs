@@ -1,10 +1,21 @@
-
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::{common::parsers::outbound::{ClientConfigAccessor, ParseError, Parser}, http::services::model::xray_config::{GRPCSettings, RealitySettings, User}};
+use crate::{
+    common::parsers::outbound::{ClientConfigCommon, ParseError, Parser},
+    http::services::model::xray_config::{GRPCSettings, RealitySettings, Settings, User},
+};
+
+pub trait VlessClientConfigAccessor {
+    fn user(&self) -> Option<&User>;
+    fn name(&self) -> Option<&str>;
+    fn security(&self) -> Option<&str>;
+    fn transport(&self) -> Option<&str>;
+    fn reality_settings(&self) -> Option<&RealitySettings>;
+    fn grpc_settings(&self) -> Option<&GRPCSettings>;
+}
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Vless {
@@ -18,13 +29,10 @@ pub struct Vless {
     host: Option<String>,
     reality: Option<RealitySettings>,
     grpc: Option<GRPCSettings>,
+    settings: Option<Settings>,
 }
 
-impl ClientConfigAccessor for Vless {
-    fn user(&self) -> Option<&User> {
-        Some(&self.user)
-    }
-
+impl ClientConfigCommon for Vless {
     fn address(&self) -> &str {
         &self.address
     }
@@ -36,6 +44,12 @@ impl ClientConfigAccessor for Vless {
     fn protocol(&self) -> &'static str {
         "vless"
     }
+}
+
+impl VlessClientConfigAccessor for Vless {
+    fn user(&self) -> Option<&User> {
+        Some(&self.user)
+    }
 
     fn name(&self) -> Option<&str> {
         self.name_client.as_deref()
@@ -45,7 +59,7 @@ impl ClientConfigAccessor for Vless {
         self.security.as_deref()
     }
 
-    fn network(&self) -> Option<&str> {
+    fn transport(&self) -> Option<&str> {
         Some(&self.network)
     }
 
@@ -90,20 +104,24 @@ impl Parser for Vless {
             .map(|s| s.to_string())
             .unwrap_or_else(|| "none".to_string());
 
-        let multi_mode = query.get("mode").map_or(true, |s| s.to_string() != "gun");
+        let grpc_settings = match query.get("mode") {
+            Some(multi_mode) => {
+                let multi_mode = multi_mode == "multi";
 
-        //dev
-        let grpc_settings = Some(GRPCSettings {
-            service_name: query
-                .get("serviceName")
-                .filter(|s| !s.is_empty())
-                .map(|s| s.to_string()),
-            multi_mode: multi_mode,
-            idle_timeout: Some(60),
-            health_check_timeout: Some(20),
-            permit_without_stream: Some(true),
-            initial_windows_size: Some(35536),
-        });
+                Some(GRPCSettings {
+                    service_name: query
+                        .get("serviceName")
+                        .filter(|s| !s.is_empty())
+                        .map(|s| s.to_string()),
+                    multi_mode: multi_mode,
+                    idle_timeout: Some(60),
+                    health_check_timeout: Some(20),
+                    permit_without_stream: Some(true),
+                    initial_windows_size: Some(35536),
+                })
+            }
+            None => None,
+        };
 
         let reality_settings = if let (Some(pbk), Some(sni), Some(sid)) =
             (query.get("pbk"), query.get("sni"), query.get("sid"))
@@ -141,6 +159,7 @@ impl Parser for Vless {
             host: query.get("host").cloned(),
             reality: reality_settings,
             grpc: grpc_settings,
+            settings: None,
         };
 
         Ok(config)

@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-use crate::common::parsers::outbound::{OutboundClientConfig, ClientConfigAccessor};
+use crate::common::parsers::{
+    outbound::{ClientConfigCommon, OutboundClientConfig},
+    protocols::{ss::ShadowsocksClientConfigAccessor, vless::VlessClientConfigAccessor},
+};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RealitySettings {
@@ -48,11 +51,26 @@ pub struct VNext {
     pub users: Vec<User>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Settings {
-    pub vnext: Vec<VNext>,
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ShadowsocksServer {
+    address: String,
+    port: u16,
+    method: String,
+    password: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Settings {
+    //vless
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vnext: Option<Vec<VNext>>,
+
+    //shadowsocks
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub servers: Option<Vec<ShadowsocksServer>>,
+}
+
+//vless
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct User {
     pub id: String,
@@ -65,7 +83,7 @@ pub struct User {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct StreamSettings {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub network: Option<String>,
+    pub transport: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub security: Option<String>,
@@ -114,28 +132,65 @@ pub struct XrayOutboundClientConfig {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mux: Option<MuxSettings>,
-    // #[serde(skip_serializing_if = "Option::is_none")]
-    // pub name_client: Option<String>,
-}
 
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name_client: Option<String>,
+}
 impl XrayOutboundClientConfig {
     pub fn new(config: &OutboundClientConfig) -> Self {
         XrayOutboundClientConfig {
             tag: None,
             mux: None,
+            // name_client: Some("Aboba".to_string()),
+            name_client: None,
             protocol: config.protocol().to_string(),
             settings: Settings {
-                vnext: vec![VNext {
-                    address: config.address().to_string(),
-                    port: config.port(),
-                    users: vec![config.user().unwrap().clone()],
-                }],
+                servers: match config {
+                    OutboundClientConfig::Shadowsocks(ss_config) => Some(vec![ShadowsocksServer {
+                        address: ss_config.address().to_string(),
+                        port: ss_config.port(),
+                        method: ss_config.method().to_string(),
+                        password: ss_config.password().to_string(),
+                    }]),
+                    _ => None,
+                },
+                vnext: match config {
+                    OutboundClientConfig::Vless(vless_config) => Some(vec![VNext {
+                        address: vless_config.address().to_string(),
+                        port: vless_config.port(),
+                        users: vec![vless_config.user().unwrap().clone()],
+                    }]),
+                    _ => None,
+                },
             },
             stream_settings: StreamSettings {
-                grpc: config.grpc_settings().cloned(),
-                reality: config.reality_settings().cloned(),
-                network: config.network().map(|network| network.to_string()),
-                security: config.security().map(|security| security.to_string()),
+                grpc: match config {
+                    OutboundClientConfig::Vless(vless_config) => {
+                        vless_config.grpc_settings().cloned()
+                    }
+                    _ => None,
+                },
+                reality: match config {
+                    OutboundClientConfig::Vless(vless_config) => {
+                        vless_config.reality_settings().cloned()
+                    }
+                    _ => None,
+                },
+                transport: match config {
+                    OutboundClientConfig::Vless(vless_config) => {
+                        vless_config.transport().map(|e| e.to_string())
+                    }
+                    OutboundClientConfig::Shadowsocks(_) => {
+                        Some("tcp".to_string())
+                    }
+                    _ => None,
+                },
+                security: match config {
+                    OutboundClientConfig::Vless(vless_config) => {
+                        vless_config.security().map(|e| e.to_string())
+                    }
+                    _ => None,
+                },
             },
         }
     }
