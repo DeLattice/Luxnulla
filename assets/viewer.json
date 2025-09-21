@@ -1,0 +1,73 @@
+{
+  "dns": {
+    "fakeip": {
+      "enabled": true,
+      "inet4_range": "198.18.0.0/15",
+      "inet6_range": "fc00::/18"
+    },
+    "independent_cache": true,
+    "rules": [
+      { "outbound": "any", "server": "dns-local" },
+      { "query_type": ["A", "AAAA"], "server": "dns-fake" }
+    ],
+    "servers": [
+      {
+        "address": "local",
+        "address_resolver": "dns-local",
+        "detour": "direct",
+        "strategy": "ipv4_only",
+        "tag": "dns-direct"
+      },
+      {
+        "address": "https://1.1.1.1/dns-query",
+        "address_resolver": "dns-local",
+        "detour": "proxy",
+        "strategy": "ipv4_only",
+        "tag": "dns-remote"
+      },
+      { "address": "rcode://success", "tag": "dns-block" },
+      { "address": "fakeip", "tag": "dns-fake" },
+      { "address": "local", "detour": "direct", "tag": "dns-local" }
+    ]
+  },
+  "endpoints": [],
+  "experimental": { "clash_api": { "default_mode": "" } },
+  "inbounds": [
+    {
+      "domain_strategy": "ipv4_only",
+      "listen": "127.0.0.1",
+      "listen_port": 1082,
+      "tag": "mixed-in",
+      "type": "mixed"
+    }
+  ],
+  "log": { "level": "info" },
+  "outbounds": [
+    {
+      "domain_strategy": "ipv4_only",
+      "flow": "",
+      "packet_encoding": "xudp",
+      "server": "102.177.189.251",
+      "server_port": 443,
+      "tag": "proxy",
+      "tls": {
+        "enabled": true,
+        "server_name": "pqh23v4.hiddendom.shop",
+        "utls": { "enabled": true, "fingerprint": "chrome" }
+      },
+      "transport": { "type": "grpc" },
+      "type": "vless",
+      "uuid": "401374e6-df77-41fb-f638-dad8184f175b"
+    },
+    { "tag": "direct", "type": "direct" }
+  ],
+  "route": {
+    "final": "proxy",
+    "find_process": true,
+    "rule_set": [],
+    "rules": [
+      { "action": "sniff", "inbound": ["mixed-in", "tun-in"] },
+      { "action": "hijack-dns", "protocol": "dns" }
+    ]
+  }
+}

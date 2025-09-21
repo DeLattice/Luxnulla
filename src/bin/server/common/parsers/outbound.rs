@@ -122,6 +122,7 @@ pub fn is_supported_scheme(line: &str) -> bool {
     return line.starts_with("vless")
         || line.starts_with("vmess")
         || line.starts_with("ss")
+        || line.starts_with("hysteria")
         || line.starts_with("trojan");
 }
 

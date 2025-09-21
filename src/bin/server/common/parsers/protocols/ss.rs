@@ -20,6 +20,7 @@ pub trait ShadowsocksClientConfigAccessor {
     fn method(&self) -> &str;
     fn password(&self) -> &str;
     fn extras(&self) -> HashMap<String, String>;
+    fn transport(&self) -> Option<&str>;
 }
 
 impl ClientConfigCommon for Shadowsocks {
@@ -47,6 +48,10 @@ impl ShadowsocksClientConfigAccessor for Shadowsocks {
 
     fn extras(&self) -> HashMap<String, String> {
         todo!()
+    }
+
+    fn transport(&self) -> Option<&str> {
+        Some("tcp")
     }
 }
 

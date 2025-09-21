@@ -5,24 +5,75 @@ use crate::common::parsers::{
     protocols::{ss::ShadowsocksClientConfigAccessor, vless::VlessClientConfigAccessor},
 };
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct TlsSettings {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server_name: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verify_peer_cert_in_names: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reject_unknown_sni: Option<bool>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allow_insecure: Option<bool>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alpn: Option<Vec<String>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_version: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_version: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cipher_suites: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub certificates: Option<Vec<String>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disable_system_root: Option<bool>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enable_session_resumption: Option<bool>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fingerprint: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pinned_peer_certificate_chain_sha256: Option<Vec<String>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub curve_preferences: Option<Vec<String>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub master_key_log: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ech_config_list: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ech_server_keys: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ech_force_query: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct RealitySettings {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fingerprint: Option<String>,
 
-    #[serde(rename(serialize = "publicKey", deserialize = "publicKey"))]
     pub public_key: String,
-
-    #[serde(rename(serialize = "serverName", deserialize = "serverName"))]
     pub server_name: String,
-
-    #[serde(rename(serialize = "shortId", deserialize = "shortId"))]
     pub short_id: String,
 
-    #[serde(
-        skip_serializing_if = "Option::is_none",
-        rename(serialize = "spiderX", deserialize = "spiderX")
-    )]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub spider_x: Option<String>,
 }
 
@@ -61,16 +112,13 @@ pub struct ShadowsocksServer {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Settings {
-    //vless
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vnext: Option<Vec<VNext>>,
 
-    //shadowsocks
     #[serde(skip_serializing_if = "Option::is_none")]
     pub servers: Option<Vec<ShadowsocksServer>>,
 }
 
-//vless
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct User {
     pub id: String,
@@ -99,6 +147,12 @@ pub struct StreamSettings {
         rename(serialize = "realitySettings", deserialize = "realitySettings")
     )]
     pub reality: Option<RealitySettings>,
+
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        rename(serialize = "tlsSettings", deserialize = "tlsSettings")
+    )]
+    pub tls: Option<TlsSettings>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -136,6 +190,7 @@ pub struct XrayOutboundClientConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name_client: Option<String>,
 }
+
 impl XrayOutboundClientConfig {
     pub fn new(config: &OutboundClientConfig) -> Self {
         XrayOutboundClientConfig {
@@ -176,12 +231,18 @@ impl XrayOutboundClientConfig {
                     }
                     _ => None,
                 },
+                tls: match config {
+                    OutboundClientConfig::Vless(vless_config) => {
+                        vless_config.tls_settings().cloned()
+                    }
+                    _ => None,
+                },
                 transport: match config {
                     OutboundClientConfig::Vless(vless_config) => {
                         vless_config.transport().map(|e| e.to_string())
                     }
-                    OutboundClientConfig::Shadowsocks(_) => {
-                        Some("tcp".to_string())
+                    OutboundClientConfig::Shadowsocks(ss_config) => {
+                        ss_config.transport().map(|e| e.to_string())
                     }
                     _ => None,
                 },

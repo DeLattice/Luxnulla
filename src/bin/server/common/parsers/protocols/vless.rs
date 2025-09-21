@@ -5,31 +5,22 @@ use url::Url;
 
 use crate::{
     common::parsers::outbound::{ClientConfigCommon, ParseError, Parser},
-    http::services::model::xray_config::{GRPCSettings, RealitySettings, Settings, User},
+    http::services::model::xray_config::{GRPCSettings, RealitySettings, TlsSettings, User},
 };
-
-pub trait VlessClientConfigAccessor {
-    fn user(&self) -> Option<&User>;
-    fn name(&self) -> Option<&str>;
-    fn security(&self) -> Option<&str>;
-    fn transport(&self) -> Option<&str>;
-    fn reality_settings(&self) -> Option<&RealitySettings>;
-    fn grpc_settings(&self) -> Option<&GRPCSettings>;
-}
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Vless {
     user: User,
     address: String,
     port: u16,
-    network: String,
+    transport: String,
     name_client: Option<String>,
     security: Option<String>,
     path: Option<String>,
     host: Option<String>,
     reality: Option<RealitySettings>,
     grpc: Option<GRPCSettings>,
-    settings: Option<Settings>,
+    tls: Option<TlsSettings>,
 }
 
 impl ClientConfigCommon for Vless {
@@ -46,6 +37,16 @@ impl ClientConfigCommon for Vless {
     }
 }
 
+pub trait VlessClientConfigAccessor {
+    fn user(&self) -> Option<&User>;
+    fn name(&self) -> Option<&str>;
+    fn security(&self) -> Option<&str>;
+    fn transport(&self) -> Option<&str>;
+    fn reality_settings(&self) -> Option<&RealitySettings>;
+    fn grpc_settings(&self) -> Option<&GRPCSettings>;
+    fn tls_settings(&self) -> Option<&TlsSettings>;
+}
+
 impl VlessClientConfigAccessor for Vless {
     fn user(&self) -> Option<&User> {
         Some(&self.user)
@@ -60,7 +61,7 @@ impl VlessClientConfigAccessor for Vless {
     }
 
     fn transport(&self) -> Option<&str> {
-        Some(&self.network)
+        Some(&self.transport)
     }
 
     fn reality_settings(&self) -> Option<&RealitySettings> {
@@ -69,6 +70,10 @@ impl VlessClientConfigAccessor for Vless {
 
     fn grpc_settings(&self) -> Option<&GRPCSettings> {
         self.grpc.as_ref()
+    }
+
+    fn tls_settings(&self) -> Option<&TlsSettings> {
+        self.tls.as_ref()
     }
 }
 
@@ -90,7 +95,7 @@ impl Parser for Vless {
             .port()
             .ok_or(ParseError::FieldMissing("port".to_string()))?;
 
-        let network = query
+        let transport = query
             .get("type")
             .ok_or(ParseError::FieldMissing("type".to_string()))?
             .to_string();
@@ -123,18 +128,18 @@ impl Parser for Vless {
             None => None,
         };
 
+        let fingerprint = query
+            .get("fp")
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "chrome".to_string());
+
+        let spx = query.get("spx").map(|s| s.to_string());
+
         let reality_settings = if let (Some(pbk), Some(sni), Some(sid)) =
             (query.get("pbk"), query.get("sni"), query.get("sid"))
         {
-            let fingerprint = query
-                .get("fp")
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| "chrome".to_string());
-
-            let spx = query.get("spx").map(|s| s.to_string());
-
             Some(RealitySettings {
-                fingerprint: Some(fingerprint),
+                fingerprint: Some(fingerprint.clone()),
                 spider_x: spx,
                 public_key: pbk.to_string(),
                 server_name: sni.to_string(),
@@ -144,22 +149,47 @@ impl Parser for Vless {
             None
         };
 
+        let tls = if let Some(sni) = query.get("sni") {
+            Some(TlsSettings {
+                fingerprint: Some(fingerprint.clone()),
+                server_name: Some(sni.to_string()),
+                verify_peer_cert_in_names: None,
+                reject_unknown_sni: None,
+                allow_insecure: None,
+                alpn: None,
+                min_version: None,
+                max_version: None,
+                cipher_suites: None,
+                certificates: None,
+                disable_system_root: None,
+                enable_session_resumption: None,
+                pinned_peer_certificate_chain_sha256: None,
+                curve_preferences: None,
+                master_key_log: None,
+                ech_config_list: None,
+                ech_server_keys: None,
+                ech_force_query: None,
+            })
+        } else {
+            None
+        };
+
         let config = Vless {
             user: User {
                 id: user_id,
-                flow: flow,
-                encryption: encryption,
+                flow,
+                encryption,
             },
             address,
             port,
-            network,
+            transport,
             name_client,
             security: query.get("security").cloned(),
             path: query.get("path").cloned(),
             host: query.get("host").cloned(),
             reality: reality_settings,
             grpc: grpc_settings,
-            settings: None,
+            tls,
         };
 
         Ok(config)
