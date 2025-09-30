@@ -1,4 +1,5 @@
 use base64::{Engine, prelude::BASE64_STANDARD};
+use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::common::parsers::protocols::{ss::Shadowsocks, vless::Vless};
@@ -27,10 +28,10 @@ impl std::fmt::Display for ParseError {
         match self {
             ParseError::FieldMissing(field) => write!(f, "Missing field: {}", field),
             ParseError::UnknownFieldType { current, expected } => write!(
-                        f,
-                        "Unknown field type: {} (expected: {})",
-                        current, expected
-                    ),
+                f,
+                "Unknown field type: {} (expected: {})",
+                current, expected
+            ),
             ParseError::Base64DecodeError(err) => write!(f, "Failed to decode base64: {}", err),
             ParseError::Utf8Error(err) => write!(f, "Failed to decode UTF-8: {}", err),
             ParseError::InvalidFormat(err) => write!(f, "Invalid format: {}", err),
@@ -39,6 +40,11 @@ impl std::fmt::Display for ParseError {
 }
 
 impl std::error::Error for ParseError {}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ExtraOutboundClientConfig {
+    pub name_client: Option<String>,
+}
 
 pub trait Parser
 where
@@ -56,6 +62,7 @@ pub trait ClientConfigCommon {
     fn address(&self) -> &str;
     fn port(&self) -> u16;
     fn protocol(&self) -> &'static str;
+    fn name_client(&self) -> Option<&str>;
 }
 
 impl ClientConfigCommon for OutboundClientConfig {
@@ -77,6 +84,13 @@ impl ClientConfigCommon for OutboundClientConfig {
         match self {
             OutboundClientConfig::Vless(vless) => vless.protocol(),
             OutboundClientConfig::Shadowsocks(ss) => ss.protocol(),
+        }
+    }
+
+    fn name_client(&self) -> Option<&str> {
+        match self {
+            OutboundClientConfig::Vless(vless) => vless.name_client(),
+            OutboundClientConfig::Shadowsocks(ss) => ss.name_client(),
         }
     }
 }

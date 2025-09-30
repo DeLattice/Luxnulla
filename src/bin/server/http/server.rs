@@ -17,7 +17,7 @@ use crate::http::handlers::{
 };
 use crate::services::{self};
 
-const SOCKET: &str = "0.0.0.0:3000";
+const SOCKET: &str = "0.0.0.0:8400";
 
 async fn root() -> &'static str {
     return "Server is working";

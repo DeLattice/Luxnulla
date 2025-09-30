@@ -4,7 +4,9 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::{
-    common::parsers::outbound::{ClientConfigCommon, ParseError, Parser},
+    common::parsers::outbound::{
+        ClientConfigCommon, ExtraOutboundClientConfig, ParseError, Parser,
+    },
     http::services::model::xray_config::{GRPCSettings, RealitySettings, TlsSettings, User},
 };
 
@@ -14,13 +16,13 @@ pub struct Vless {
     address: String,
     port: u16,
     transport: String,
-    name_client: Option<String>,
     security: Option<String>,
     path: Option<String>,
     host: Option<String>,
     reality: Option<RealitySettings>,
     grpc: Option<GRPCSettings>,
     tls: Option<TlsSettings>,
+    extra: ExtraOutboundClientConfig,
 }
 
 impl ClientConfigCommon for Vless {
@@ -35,11 +37,14 @@ impl ClientConfigCommon for Vless {
     fn protocol(&self) -> &'static str {
         "vless"
     }
+
+    fn name_client(&self) -> Option<&str> {
+        self.extra.name_client.as_deref()
+    }
 }
 
 pub trait VlessClientConfigAccessor {
     fn user(&self) -> Option<&User>;
-    fn name(&self) -> Option<&str>;
     fn security(&self) -> Option<&str>;
     fn transport(&self) -> Option<&str>;
     fn reality_settings(&self) -> Option<&RealitySettings>;
@@ -50,10 +55,6 @@ pub trait VlessClientConfigAccessor {
 impl VlessClientConfigAccessor for Vless {
     fn user(&self) -> Option<&User> {
         Some(&self.user)
-    }
-
-    fn name(&self) -> Option<&str> {
-        self.name_client.as_deref()
     }
 
     fn security(&self) -> Option<&str> {
@@ -99,8 +100,6 @@ impl Parser for Vless {
             .get("type")
             .ok_or(ParseError::FieldMissing("type".to_string()))?
             .to_string();
-
-        let name_client = url.fragment().map(|s| s.to_string());
 
         let flow = query.get("flow").map(|s| s.to_string());
 
@@ -174,6 +173,10 @@ impl Parser for Vless {
             None
         };
 
+        let name_client = url.fragment().map(|s| s.to_string());
+
+        let extra = ExtraOutboundClientConfig { name_client };
+
         let config = Vless {
             user: User {
                 id: user_id,
@@ -183,7 +186,7 @@ impl Parser for Vless {
             address,
             port,
             transport,
-            name_client,
+            extra,
             security: query.get("security").cloned(),
             path: query.get("path").cloned(),
             host: query.get("host").cloned(),

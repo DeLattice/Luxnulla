@@ -4,7 +4,9 @@ use base64::{Engine, prelude::BASE64_STANDARD};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::common::parsers::outbound::{ClientConfigCommon, ParseError, Parser};
+use crate::common::parsers::outbound::{
+    ClientConfigCommon, ExtraOutboundClientConfig, ParseError, Parser,
+};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Shadowsocks {
@@ -13,7 +15,7 @@ pub struct Shadowsocks {
     address: String,
     port: u16,
     name: Option<String>,
-    extras: HashMap<String, String>,
+    extra: ExtraOutboundClientConfig,
 }
 
 pub trait ShadowsocksClientConfigAccessor {
@@ -34,6 +36,10 @@ impl ClientConfigCommon for Shadowsocks {
 
     fn protocol(&self) -> &'static str {
         "shadowsocks"
+    }
+
+    fn name_client(&self) -> Option<&str> {
+        self.extra.name_client.as_deref()
     }
 }
 
@@ -73,13 +79,17 @@ impl Parser for Shadowsocks {
         let (method, password) = parse_shadowsocks_creds(&decoded_data)
             .ok_or(ParseError::FieldMissing("port".to_string()))?;
 
+        let extra = ExtraOutboundClientConfig {
+            name_client: Some("das".to_string()),
+        };
+
         let config = Shadowsocks {
             method: method.to_string(),
             password: password.to_string(),
             address,
             port,
             name: Some("My Shadowsocks Server".to_string()),
-            extras: HashMap::new(),
+            extra,
         };
 
         Ok(config)

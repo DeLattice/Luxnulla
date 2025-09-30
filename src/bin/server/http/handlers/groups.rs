@@ -96,9 +96,11 @@ pub struct UpdateGroupResponse {
     configs: Vec<XrayOutboundClientConfig>,
 }
 
+//todo rename group if get different (req != payload.name) name
 #[axum::debug_handler]
 pub async fn update_group(
     State(storage): State<Arc<StorageService>>,
+    Path(group_name): Path<String>,
     Json(req): Json<UpdateGroup>,
 ) -> impl IntoResponse {
     let group = Group::new(req.name.clone(), req.payload.clone());

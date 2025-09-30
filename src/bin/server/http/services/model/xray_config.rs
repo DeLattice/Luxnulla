@@ -187,7 +187,10 @@ pub struct XrayOutboundClientConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mux: Option<MuxSettings>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename(serialize = "nameClient", deserialize = "nameClient"),
+        skip_serializing_if = "Option::is_none"
+    )]
     pub name_client: Option<String>,
 }
 
@@ -196,8 +199,7 @@ impl XrayOutboundClientConfig {
         XrayOutboundClientConfig {
             tag: None,
             mux: None,
-            // name_client: Some("Aboba".to_string()),
-            name_client: None,
+            name_client: Some(config.name_client().expect("REASON").to_string()),
             protocol: config.protocol().to_string(),
             settings: Settings {
                 servers: match config {
