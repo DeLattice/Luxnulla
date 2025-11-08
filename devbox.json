@@ -6,10 +6,7 @@
       "version": "latest",
       "outputs": ["out"]
     },
-    "pkg-config": "latest",
-    "nix-ld":     "latest",
-    "sql-studio": "latest",
-    "firejail":   "latest"
+    "sql-studio": "latest"
   },
   "shell": {
     "init_hook": [

@@ -1,15 +1,11 @@
+use anyhow::anyhow;
 use anyhow::{Context, Result};
 use dirs::config_dir;
 use luxnulla::{CONFIG_DIR, XRAY_CONFIG_FILE};
-use std::{sync::Mutex};
+use std::sync::Mutex;
 use tokio::process::{Child, Command};
-use anyhow::anyhow;
 
 static XRAY_CHILD: Mutex<Option<Child>> = Mutex::new(None);
-
-pub async fn start_xray() -> Result<()> {
-    spawn_xray().await.context("Failed to spawn Xray process")
-}
 
 pub fn get_xray_status() -> bool {
     let mut child_guard = XRAY_CHILD.lock().unwrap();
@@ -28,7 +24,7 @@ pub fn get_xray_status() -> bool {
     }
 }
 
-async fn spawn_xray() -> Result<()> {
+pub async fn spawn_xray() -> Result<()> {
     let config_path = config_dir()
         .ok_or_else(|| anyhow::anyhow!("Failed to get config directory"))?
         .join(CONFIG_DIR)
@@ -67,7 +63,9 @@ pub async fn stop_xray() -> Result<(), Box<dyn std::error::Error + Send + Sync>>
 }
 
 pub async fn restart_xray() -> Result<(), anyhow::Error> {
-    stop_xray().await.map_err(|e| anyhow!("Failed to stop Xray: {}", e))?;
-    start_xray().await?;
+    stop_xray()
+        .await
+        .map_err(|e| anyhow!("Failed to stop Xray: {}", e))?;
+    spawn_xray().await?;
     Ok(())
 }

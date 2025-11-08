@@ -1,27 +1,52 @@
 use luxnulla::CONFIG_DIR;
-use rusqlite::{params, Connection, Result as RusqliteResult};
+use rusqlite::{Connection, Result as RusqliteResult, params, params_from_iter};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::sync::{Arc, Mutex};
 
+use crate::common::parsers::outbound::ExtraOutboundClientConfig;
 use crate::http::services::model::xray_config::XrayOutboundClientConfig;
 use crate::services::common::paginator::PaginationParams;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Group {
     pub name: String,
-    pub configs: Vec<XrayOutboundClientConfig>,
+    pub configs: Vec<XrayOutboundModel>,
 }
 
 impl Group {
-    pub fn new(name: String, configs: Vec<XrayOutboundClientConfig>) -> Self {
+    pub fn new(name: String, configs: Vec<XrayOutboundModel>) -> Self {
         Self { name, configs }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct XrayOutboundModel {
+    pub id: i32,
+
+    #[serde(
+        rename(serialize = "extra", deserialize = "extra"),
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub extra: Option<ExtraOutboundClientConfig>,
+
+    #[serde(flatten)]
+    pub config: XrayOutboundClientConfig,
+}
+
+impl XrayOutboundModel {
+    pub fn new(
+        id: i32,
+        extra: Option<ExtraOutboundClientConfig>,
+        config: XrayOutboundClientConfig,
+    ) -> Self {
+        Self { id, extra, config }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PaginatedConfigs {
-    pub configs: Vec<XrayOutboundClientConfig>,
+    pub configs: Vec<XrayOutboundModel>,
     pub total_items: i64,
 }
 
@@ -60,13 +85,13 @@ impl StorageService {
             "CREATE TABLE IF NOT EXISTS configs (
                 id INTEGER PRIMARY KEY,
                 group_id INTEGER NOT NULL,
-                config_data TEXT NOT NULL,
+                extra TEXT NOT NULL,
+                data TEXT NOT NULL,
                 FOREIGN KEY (group_id) REFERENCES groups (id) ON DELETE CASCADE
             )",
             [],
         )
         .expect("Failed to create 'configs' table.");
-
 
         let sq = Arc::new(Mutex::new(conn));
 
@@ -80,34 +105,53 @@ impl StorageService {
         Ok(exists)
     }
 
-    pub fn upsert_group(&self, group: Group) -> Result<(), StorageError> {
+    pub fn upsert_group(
+        &self,
+        group_name: &str,
+        configs: Vec<XrayOutboundClientConfig>,
+    ) -> Result<Vec<XrayOutboundModel>, StorageError> {
         let mut conn = self.sq.lock().map_err(|_| StorageError::LockError)?;
         let tx = conn.transaction()?;
 
         tx.execute(
             "INSERT OR IGNORE INTO groups (name) VALUES (?1)",
-            params![&group.name],
+            params![group_name],
         )?;
 
         let group_id: i64 = tx.query_row(
             "SELECT id FROM groups WHERE name = ?1",
-            params![&group.name],
+            params![group_name],
             |row| row.get(0),
         )?;
 
         tx.execute("DELETE FROM configs WHERE group_id = ?1", params![group_id])?;
 
+        let mut created_configs = vec![];
+
         {
-            let mut stmt = tx.prepare("INSERT INTO configs (group_id, config_data) VALUES (?1, ?2)")?;
-            for config in &group.configs {
-                let config_json = serde_json::to_string(config)
+            let mut stmt = tx.prepare(
+                "INSERT INTO configs (group_id, data, extra) VALUES (?1, ?2, ?3) RETURNING id",
+            )?;
+
+            for config in configs {
+                let config_json = serde_json::to_string(&config)
                     .map_err(|e| StorageError::SerializationError(e.to_string()))?;
-                stmt.execute(params![group_id, config_json])?;
+
+                let extra = serde_json::to_string(&config.extra().unwrap())
+                    .map_err(|e| StorageError::SerializationError(e.to_string()))?;
+
+                let mut rows = stmt.query(params![group_id, config_json, extra])?;
+                if let Some(row) = rows.next()? {
+                    let id: i32 = row.get(0)?;
+                    let client_name = config.extra();
+
+                    created_configs.push(XrayOutboundModel::new(id, client_name, config));
+                }
             }
         }
 
         tx.commit()?;
-        Ok(())
+        Ok(created_configs)
     }
 
     pub fn get_paginated_group_configs(
@@ -117,15 +161,16 @@ impl StorageService {
     ) -> Result<Option<PaginatedConfigs>, StorageError> {
         let conn = self.sq.lock().map_err(|_| StorageError::LockError)?;
 
-        let group_id_result: RusqliteResult<i64> = conn.query_row(
-            "SELECT id FROM groups WHERE name = ?1",
-            [name],
-            |row| row.get(0),
-        );
+        let group_id_result: RusqliteResult<i64> =
+            conn.query_row("SELECT id FROM groups WHERE name = ?1", [name], |row| {
+                row.get(0)
+            });
 
         let group_id = match group_id_result {
             Ok(id) => id,
-            Err(rusqlite::Error::QueryReturnedNoRows) => return Err(StorageError::GroupNotFound(name.to_string())),
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
+                return Err(StorageError::GroupNotFound(name.to_string()));
+            }
             Err(e) => return Err(e.into()),
         };
 
@@ -136,32 +181,42 @@ impl StorageService {
         )?;
 
         let offset = (pagination.page as i64) * (pagination.limit as i64);
-        let mut stmt = conn.prepare(
-            "SELECT config_data FROM configs WHERE group_id = ?1 LIMIT ?2 OFFSET ?3",
-        )?;
+        let mut stmt =
+            conn.prepare("SELECT id, data, extra FROM configs WHERE group_id = ?1 LIMIT ?2 OFFSET ?3")?;
 
-        let configs_iter = stmt.query_map(params![group_id, pagination.limit, offset], |row| {
-            let config_json: String = row.get(0)?;
-            serde_json::from_str(&config_json)
-                .map_err(|e| rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(e)))
-        })?;
+        let configs = stmt
+            .query_map(params![group_id, pagination.limit, offset], |row| {
+                let config_id: i32 = row.get(0)?;
+                let config_json: String = row.get(1)?;
+                let extra: String = row.get(2)?;
 
-        let mut configs = Vec::new();
-        for config_result in configs_iter {
-            configs.push(config_result?);
-        }
+                let extra = serde_json::from_str::<ExtraOutboundClientConfig>(&extra).expect("Failed to parse extra");
 
-        Ok(Some(PaginatedConfigs { configs, total_items }))
+                serde_json::from_str::<XrayOutboundClientConfig>(&config_json)
+                    .map_err(|e| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            0,
+                            rusqlite::types::Type::Text,
+                            Box::new(e),
+                        )
+                    })
+                    .map(|config| XrayOutboundModel::new(config_id, Some(extra), config))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(Some(PaginatedConfigs {
+            configs,
+            total_items,
+        }))
     }
 
     pub fn get_group(&self, name: &str) -> Result<Option<Group>, StorageError> {
         let conn = self.sq.lock().map_err(|_| StorageError::LockError)?;
 
-        let group_id_result: RusqliteResult<i64> = conn.query_row(
-            "SELECT id FROM groups WHERE name = ?1",
-            [name],
-            |row| row.get(0),
-        );
+        let group_id_result: RusqliteResult<i64> =
+            conn.query_row("SELECT id FROM groups WHERE name = ?1", [name], |row| {
+                row.get(0)
+            });
 
         let group_id = match group_id_result {
             Ok(id) => id,
@@ -169,19 +224,54 @@ impl StorageService {
             Err(e) => return Err(e.into()),
         };
 
-        let mut stmt = conn.prepare("SELECT config_data FROM configs WHERE group_id = ?1")?;
-        let configs_iter = stmt.query_map([group_id], |row| {
-            let config_json: String = row.get(0)?;
-            serde_json::from_str(&config_json)
-                .map_err(|e| rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(e)))
-        })?;
-
-        let mut configs = Vec::new();
-        for result in configs_iter {
-            configs.push(result?);
-        }
+        let mut stmt = conn.prepare("SELECT data FROM configs WHERE group_id = ?1")?;
+        let configs = stmt
+            .query_map([group_id], |row| {
+                let config_json: String = row.get(0)?;
+                serde_json::from_str(&config_json).map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        0,
+                        rusqlite::types::Type::Text,
+                        Box::new(e),
+                    )
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
 
         Ok(Some(Group::new(name.to_string(), configs)))
+    }
+
+    pub fn get_configs_by_ids(
+        &self,
+        ids: &Vec<i32>,
+    ) -> Result<Vec<XrayOutboundClientConfig>, StorageError> {
+        let conn = self.sq.lock().map_err(|_| StorageError::LockError)?;
+
+        if ids.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let placeholders = std::iter::repeat("?")
+            .take(ids.len())
+            .collect::<Vec<_>>()
+            .join(",");
+        let query = format!("SELECT data FROM configs WHERE id IN ({})", placeholders);
+
+        let mut stmt = conn.prepare(&query)?;
+        let configs_iter = stmt.query_map(params_from_iter(ids.iter()), |row| {
+            let config_json: String = row.get(0)?;
+            serde_json::from_str(&config_json).map_err(|e| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    0,
+                    rusqlite::types::Type::Text,
+                    Box::new(e),
+                )
+            })
+        })?;
+
+        configs_iter
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(Into::into)
     }
 
     pub fn list_group_names(&self) -> Result<Vec<String>, StorageError> {
@@ -205,6 +295,35 @@ impl StorageService {
 
         conn.execute("DELETE FROM groups", [])?;
         Ok(())
+    }
+
+    pub fn upsert_configs(
+        &self,
+        configs: Vec<(i32, XrayOutboundClientConfig)>,
+    ) -> Result<Vec<XrayOutboundModel>, StorageError> {
+        let mut conn = self.sq.lock().map_err(|_| StorageError::LockError)?;
+        let tx = conn.transaction()?;
+
+        let mut created_configs = Vec::new();
+
+        {
+            let mut stmt =
+                tx.prepare("INSERT INTO configs (group_id, data) VALUES (?1, ?2) RETURNING id")?;
+            for (group_id, config) in configs {
+                tx.execute("DELETE FROM configs WHERE group_id = ?1", params![group_id])?;
+
+                let config_json = serde_json::to_string(&config)
+                    .map_err(|e| StorageError::SerializationError(e.to_string()))?;
+                let mut rows = stmt.query(params![group_id, config_json])?;
+                if let Some(row) = rows.next()? {
+                    let id: i32 = row.get(0)?;
+                    created_configs.push(XrayOutboundModel::new(id, None, config));
+                }
+            }
+        }
+
+        tx.commit()?;
+        Ok(created_configs)
     }
 
     pub fn count_groups(&self) -> Result<usize, StorageError> {

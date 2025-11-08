@@ -3,7 +3,9 @@ use crate::common::{
     parsers::{self, outbound::OutboundClientConfig},
 };
 
-pub async fn get_configs(url: &str) -> Result<Vec<OutboundClientConfig>, Box<dyn std::error::Error>> {
+pub async fn get_configs(
+    url: &str,
+) -> Result<Vec<OutboundClientConfig>, Box<dyn std::error::Error>> {
     let body = match fetchers::config::fetch(url).await {
         Ok(body) => body,
         Err(e) => {

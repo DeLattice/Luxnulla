@@ -1,4 +1,4 @@
-use base64::{Engine, prelude::BASE64_STANDARD};
+use base64::{Engine, prelude::{BASE64_STANDARD, BASE64_URL_SAFE}};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -41,9 +41,13 @@ impl std::fmt::Display for ParseError {
 
 impl std::error::Error for ParseError {}
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ExtraOutboundClientConfig {
-    pub name_client: Option<String>,
+    #[serde(
+        rename = "clientName",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub client_name: Option<String>,
 }
 
 pub trait Parser
@@ -62,7 +66,7 @@ pub trait ClientConfigCommon {
     fn address(&self) -> &str;
     fn port(&self) -> u16;
     fn protocol(&self) -> &'static str;
-    fn name_client(&self) -> Option<&str>;
+    fn extra(&self) -> &ExtraOutboundClientConfig;
 }
 
 impl ClientConfigCommon for OutboundClientConfig {
@@ -87,10 +91,10 @@ impl ClientConfigCommon for OutboundClientConfig {
         }
     }
 
-    fn name_client(&self) -> Option<&str> {
+    fn extra(&self) -> &ExtraOutboundClientConfig {
         match self {
-            OutboundClientConfig::Vless(vless) => vless.name_client(),
-            OutboundClientConfig::Shadowsocks(ss) => ss.name_client(),
+            OutboundClientConfig::Vless(vless) => vless.extra(),
+            OutboundClientConfig::Shadowsocks(ss) => ss.extra(),
         }
     }
 }
@@ -118,13 +122,23 @@ pub fn decode_config_from_base64(
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let body = payload.trim();
 
-    let content = match BASE64_STANDARD.decode(body) {
+    // Добавляем отладочный вывод для строки, которую пытаемся декодировать
+    println!("DEBUG: Attempting to decode: {}", body);
+
+    let content = match BASE64_URL_SAFE.decode(body) {
         Ok(decoded_bytes) => {
             println!("INFO: Content detected as Base64. Decoding...");
-            String::from_utf8(decoded_bytes)?
+            match String::from_utf8(decoded_bytes) {
+                Ok(decoded_string) => decoded_string,
+                Err(e) => {
+                    eprintln!("Failed to decode UTF-8 after Base64 decode: {}", e);
+                    return Err(Box::new(e));
+                }
+            }
         }
-        Err(_) => {
-            println!("INFO: Content detected as plain text.");
+        Err(e) => { // Ловим ошибку декодирования Base64
+            eprintln!("INFO: Failed to decode Base64: {}", e);
+            // Возвращаем оригинальную строку, если декодирование не удалось
             body.to_string()
         }
     };
@@ -156,6 +170,8 @@ pub fn work(payload: &str) -> Result<Vec<OutboundClientConfig>, ()> {
     let mut configs = Vec::new();
 
     for line in payload.lines() {
+        println!("INFO: Parsing line {}", line);
+
         let Ok(url) = Url::parse(line) else {
             eprintln!("Is not valid url {}", line);
 

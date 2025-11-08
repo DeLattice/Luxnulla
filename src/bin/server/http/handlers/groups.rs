@@ -2,13 +2,17 @@ use crate::{
     http::{
         common::groups::process_config, services::model::xray_config::XrayOutboundClientConfig,
     },
-    services::{Group, StorageService, common::paginator::PaginationParams},
+    services::{StorageService, common::paginator::PaginationParams},
 };
 use axum::{
     Json,
     extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
+};
+use futures::{
+    future,
+    stream::{self, StreamExt},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -17,27 +21,18 @@ use std::sync::Arc;
 pub async fn create_group(
     State(storage): State<Arc<StorageService>>,
     Path(name): Path<String>,
-    Json(req): Json<String>,
+    Json(req): Json<Vec<String>>,
 ) -> impl IntoResponse {
-    let decoded_configs = match process_config(&req).await {
-        Ok(configs) => configs,
-        Err(e) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({
-                    "error": "Invalid config format",
-                    "details": e.to_string()
-                })),
-            )
-                .into_response();
-        }
-    };
+    let configs = stream::iter(req)
+        .then(async |raw| process_config(&raw).await)
+        .filter_map(|maybe| future::ready(maybe.ok()))
+        .flat_map(|v| stream::iter(v))
+        .collect::<Vec<_>>()
+        .await;
 
-    let group = Group::new(name, decoded_configs);
-
-    match storage.upsert_group(group.clone()) {
-        Ok(()) => {
-            let configs: Vec<_> = group.configs.iter().take(100).collect();
+    match storage.upsert_group(&name, configs) {
+        Ok(configs) => {
+            let configs = configs.iter().take(100).collect::<Vec<_>>();
 
             (StatusCode::CREATED, Json(json!(configs))).into_response()
         }
@@ -72,7 +67,7 @@ pub async fn get_paginated_group_configs(
     Query(pagination): Query<PaginationParams>,
 ) -> impl IntoResponse {
     match storage.get_paginated_group_configs(&group_name, &pagination) {
-        Ok(groups) => (StatusCode::OK, Json(json!(groups.unwrap().configs))).into_response(),
+        Ok(data) => (StatusCode::OK, Json(json!(data.unwrap().configs))).into_response(),
         Err(e) => (
             StatusCode::NOT_FOUND,
             Json(json!({
@@ -103,26 +98,27 @@ pub async fn update_group(
     Path(group_name): Path<String>,
     Json(req): Json<UpdateGroup>,
 ) -> impl IntoResponse {
-    let group = Group::new(req.name.clone(), req.payload.clone());
+    // let group = Group::new(req.name.clone(), req.payload.clone());
 
-    match storage.upsert_group(group) {
-        Ok(_) => (
-            StatusCode::OK,
-            Json(UpdateGroupResponse {
-                name: req.name,
-                configs: req.payload,
-            }),
-        )
-            .into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({
-                "error": "Failed to retrieve groups",
-                "details": e.to_string()
-            })),
-        )
-            .into_response(),
-    }
+    // match storage.upsert_group(group) {
+    //     Ok(_) => (
+    //         StatusCode::OK,
+    //         Json(UpdateGroupResponse {
+    //             name: req.name,
+    //             configs: req.payload,
+    //         }),
+    //     )
+    //         .into_response(),
+    //     Err(e) => (
+    //         StatusCode::INTERNAL_SERVER_ERROR,
+    //         Json(json!({
+    //             "error": "Failed to retrieve groups",
+    //             "details": e.to_string()
+    //         })),
+    //     )
+    //         .into_response(),
+    // }
+    ()
 }
 
 #[axum::debug_handler]

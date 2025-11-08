@@ -14,7 +14,7 @@ pub async fn get_xray_status() -> impl IntoResponse {
 #[axum::debug_handler]
 pub async fn toggle_xray(Path(action): Path<String>) -> impl IntoResponse {
     let response = match action.as_str() {
-        "on" => match xray::start_xray().await {
+        "on" => match xray::spawn_xray().await {
             Ok(_) => (
                 StatusCode::OK,
                 Json(json!({"status": "Xray started successfully"})),
@@ -56,11 +56,7 @@ pub async fn toggle_xray(Path(action): Path<String>) -> impl IntoResponse {
 #[axum::debug_handler]
 pub async fn get_outbounds() -> impl IntoResponse {
     match xray::outbounds::get_outbounds() {
-        Ok(configs) => (
-            StatusCode::OK,
-            Json(configs),
-        )
-            .into_response(),
+        Ok(configs) => (StatusCode::OK, Json(configs)).into_response(),
         Err(err) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": format!("Failed to get config: {}", err)})),
@@ -70,8 +66,8 @@ pub async fn get_outbounds() -> impl IntoResponse {
 }
 
 #[axum::debug_handler]
-pub async fn apply_outbounds(Json(req): Json<Vec<XrayOutboundClientConfig>>) -> impl IntoResponse {
-    match xray::outbounds::update_outbounds(&req) {
+pub async fn apply_outbounds(Json(configs): Json<Vec<i32>>) -> impl IntoResponse {
+    match xray::outbounds::update_outbounds(&configs) {
         Ok(configs) => match xray::restart_xray().await {
             Ok(_) => (StatusCode::OK, Json(json!(configs))),
             Err(err) => (
@@ -89,9 +85,7 @@ pub async fn apply_outbounds(Json(req): Json<Vec<XrayOutboundClientConfig>>) -> 
 }
 
 #[axum::debug_handler]
-pub async fn check_configs(
-    Json(req): Json<Vec<XrayOutboundClientConfig>>
-) -> impl IntoResponse {
+pub async fn check_configs(Json(req): Json<Vec<XrayOutboundClientConfig>>) -> impl IntoResponse {
     xray::checker::ping(req);
 
     StatusCode::OK

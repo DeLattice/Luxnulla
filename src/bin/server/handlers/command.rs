@@ -1,4 +1,4 @@
-use crate::services::{ ConfigService, StatusService};
+use crate::services::{ConfigService, StatusService};
 use luxnulla::{CommandRequest, CommandResponse, OkCommandResponse};
 use std::path::PathBuf;
 
@@ -30,7 +30,7 @@ impl CommandHandler {
 
             CommandRequest::EditXray => self.config_service.edit_xray_config().await,
 
-            CommandRequest::EditLuxnulla => self.config_service.edit_luxnulla_config().await
+            CommandRequest::EditLuxnulla => self.config_service.edit_luxnulla_config().await,
         }
     }
 }

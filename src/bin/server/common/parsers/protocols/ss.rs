@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use base64::{Engine, prelude::BASE64_STANDARD};
 use serde::{Deserialize, Serialize};
 use url::Url;
@@ -21,7 +19,6 @@ pub struct Shadowsocks {
 pub trait ShadowsocksClientConfigAccessor {
     fn method(&self) -> &str;
     fn password(&self) -> &str;
-    fn extras(&self) -> HashMap<String, String>;
     fn transport(&self) -> Option<&str>;
 }
 
@@ -38,8 +35,8 @@ impl ClientConfigCommon for Shadowsocks {
         "shadowsocks"
     }
 
-    fn name_client(&self) -> Option<&str> {
-        self.extra.name_client.as_deref()
+    fn extra(&self) -> &ExtraOutboundClientConfig {
+        &self.extra
     }
 }
 
@@ -52,15 +49,11 @@ impl ShadowsocksClientConfigAccessor for Shadowsocks {
         &self.password.as_ref()
     }
 
-    fn extras(&self) -> HashMap<String, String> {
-        todo!()
-    }
-
     fn transport(&self) -> Option<&str> {
         Some("tcp")
     }
 }
-
+// ss://YWVzLTEyOC1nY206Z3g1S25pMmY2YVhZakJmQ0VnU0tuUQ==@37.27.184.130:1080#%F0%9F%9A%80%20Marz%20%28igni_desktop_grpc_reality_flow%29%20%5BShadowsocks%20-%20tcp%5D
 impl Parser for Shadowsocks {
     fn parse(url: &Url) -> Result<Self, ParseError> {
         let address = url
@@ -72,6 +65,8 @@ impl Parser for Shadowsocks {
             .port()
             .ok_or(ParseError::FieldMissing("port".to_string()))?;
 
+        println!("username: {}", url.username());
+
         let encoded_data = url.username();
         let decoded_bytes = BASE64_STANDARD.decode(encoded_data)?;
         let decoded_data = String::from_utf8(decoded_bytes)?;
@@ -79,9 +74,9 @@ impl Parser for Shadowsocks {
         let (method, password) = parse_shadowsocks_creds(&decoded_data)
             .ok_or(ParseError::FieldMissing("port".to_string()))?;
 
-        let extra = ExtraOutboundClientConfig {
-            name_client: Some("das".to_string()),
-        };
+        let client_name = url.fragment().map(|s| s.to_string());
+
+        let extra = ExtraOutboundClientConfig { client_name };
 
         let config = Shadowsocks {
             method: method.to_string(),

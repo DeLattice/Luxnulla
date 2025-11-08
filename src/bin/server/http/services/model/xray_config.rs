@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::common::parsers::{
-    outbound::{ClientConfigCommon, OutboundClientConfig},
+    outbound::{ClientConfigCommon, ExtraOutboundClientConfig, OutboundClientConfig},
     protocols::{ss::ShadowsocksClientConfigAccessor, vless::VlessClientConfigAccessor},
 };
 
@@ -187,19 +187,16 @@ pub struct XrayOutboundClientConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mux: Option<MuxSettings>,
 
-    #[serde(
-        rename(serialize = "nameClient", deserialize = "nameClient"),
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub name_client: Option<String>,
+    #[serde(skip)]
+    pub extra: Option<ExtraOutboundClientConfig>,
 }
 
 impl XrayOutboundClientConfig {
     pub fn new(config: &OutboundClientConfig) -> Self {
         XrayOutboundClientConfig {
+            extra: Some(config.extra().clone()),
             tag: None,
             mux: None,
-            name_client: Some(config.name_client().expect("REASON").to_string()),
             protocol: config.protocol().to_string(),
             settings: Settings {
                 servers: match config {
@@ -256,5 +253,9 @@ impl XrayOutboundClientConfig {
                 },
             },
         }
+    }
+
+    pub fn extra(&self) -> Option<ExtraOutboundClientConfig> {
+        self.extra.clone()
     }
 }

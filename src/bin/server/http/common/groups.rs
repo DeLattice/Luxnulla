@@ -1,7 +1,10 @@
 use base64::{Engine, prelude::BASE64_STANDARD};
 use url::Url;
 
-use crate::{common::parsers::outbound, http::services::model::xray_config::XrayOutboundClientConfig, services::xray::fetcher::get_configs};
+use crate::{
+    common::parsers::outbound, http::services::model::xray_config::XrayOutboundClientConfig,
+    services::xray::fetcher::get_configs,
+};
 
 pub enum ConfigType {
     RAW,
@@ -24,7 +27,9 @@ pub fn determine_config_type(config: &str) -> Result<ConfigType, std::io::Error>
     }
 }
 
-pub async fn process_config(payload: &str) -> Result<Vec<XrayOutboundClientConfig>, std::io::Error> {
+pub async fn process_config(
+    payload: &str,
+) -> Result<Vec<XrayOutboundClientConfig>, std::io::Error> {
     match determine_config_type(payload)? {
         ConfigType::RAW => {
             if let Ok(_) = Url::parse(&payload) {

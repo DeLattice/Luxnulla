@@ -38,8 +38,8 @@ impl ClientConfigCommon for Vless {
         "vless"
     }
 
-    fn name_client(&self) -> Option<&str> {
-        self.extra.name_client.as_deref()
+    fn extra(&self) -> &ExtraOutboundClientConfig {
+        &self.extra
     }
 }
 
@@ -175,7 +175,9 @@ impl Parser for Vless {
 
         let name_client = url.fragment().map(|s| s.to_string());
 
-        let extra = ExtraOutboundClientConfig { name_client };
+        let extra = ExtraOutboundClientConfig {
+            client_name: name_client,
+        };
 
         let config = Vless {
             user: User {
