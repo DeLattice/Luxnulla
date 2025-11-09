@@ -1,4 +1,5 @@
 use base64::{Engine, prelude::BASE64_STANDARD};
+use percent_encoding;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -12,7 +13,6 @@ pub struct Shadowsocks {
     password: String,
     address: String,
     port: u16,
-    name: Option<String>,
     extra: ExtraOutboundClientConfig,
 }
 
@@ -53,7 +53,7 @@ impl ShadowsocksClientConfigAccessor for Shadowsocks {
         Some("tcp")
     }
 }
-// ss://YWVzLTEyOC1nY206Z3g1S25pMmY2YVhZakJmQ0VnU0tuUQ==@37.27.184.130:1080#%F0%9F%9A%80%20Marz%20%28igni_desktop_grpc_reality_flow%29%20%5BShadowsocks%20-%20tcp%5D
+
 impl Parser for Shadowsocks {
     fn parse(url: &Url) -> Result<Self, ParseError> {
         let address = url
@@ -65,14 +65,16 @@ impl Parser for Shadowsocks {
             .port()
             .ok_or(ParseError::FieldMissing("port".to_string()))?;
 
-        println!("username: {}", url.username());
+        let creds = {
+            let percent_decoded =
+                percent_encoding::percent_decode_str(url.username()).collect::<Vec<u8>>();
+            let base_decoded = BASE64_STANDARD.decode(percent_decoded)?;
 
-        let encoded_data = url.username();
-        let decoded_bytes = BASE64_STANDARD.decode(encoded_data)?;
-        let decoded_data = String::from_utf8(decoded_bytes)?;
+            String::from_utf8(base_decoded)?
+        };
 
-        let (method, password) = parse_shadowsocks_creds(&decoded_data)
-            .ok_or(ParseError::FieldMissing("port".to_string()))?;
+        let (method, password) =
+            parse_shadowsocks_creds(&creds).ok_or(ParseError::FieldMissing("port".to_string()))?;
 
         let client_name = url.fragment().map(|s| s.to_string());
 
@@ -83,7 +85,6 @@ impl Parser for Shadowsocks {
             password: password.to_string(),
             address,
             port,
-            name: Some("My Shadowsocks Server".to_string()),
             extra,
         };
 
@@ -91,8 +92,12 @@ impl Parser for Shadowsocks {
     }
 }
 
+// aes-128-gcm:gx5Kni2f6aXYjBfCEgSKnQ
+// ==>
+// method: aes-128-gcm | password: gx5Kni2f6aXYjBfCEgSKnQ
 fn parse_shadowsocks_creds(decoded_string: &str) -> Option<(&str, &str)> {
     let parts: Vec<&str> = decoded_string.splitn(2, ':').collect();
+
     if parts.len() == 2 {
         Some((parts[0], parts[1]))
     } else {

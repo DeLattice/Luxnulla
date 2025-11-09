@@ -5,8 +5,15 @@ use std::fs;
 use std::sync::{Arc, Mutex};
 
 use crate::common::parsers::outbound::ExtraOutboundClientConfig;
+use crate::http::handlers::groups::ResCreateGroup;
 use crate::http::services::model::xray_config::XrayOutboundClientConfig;
 use crate::services::common::paginator::PaginationParams;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SqlGroup {
+    pub id: i32,
+    pub name: String,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Group {
@@ -75,7 +82,7 @@ impl StorageService {
         conn.execute(
             "CREATE TABLE IF NOT EXISTS groups (
                 id INTEGER PRIMARY KEY,
-                name TEXT NOT NULL UNIQUE
+                name TEXT NOT NULL
             )",
             [],
         )
@@ -105,24 +112,66 @@ impl StorageService {
         Ok(exists)
     }
 
-    pub fn upsert_group(
+    pub fn create_group(
         &self,
         group_name: &str,
+        configs: Vec<XrayOutboundClientConfig>,
+    ) -> Result<ResCreateGroup, StorageError> {
+        let mut conn = self.sq.lock().map_err(|_| StorageError::LockError)?;
+        let tx = conn.transaction()?;
+
+        tx.execute("INSERT INTO groups (name) VALUES (?1)", params![group_name])?;
+
+        let group_id: i64 = tx.last_insert_rowid();
+
+        let mut created_configs = vec![];
+
+        {
+            let mut stmt = tx.prepare(
+                "INSERT INTO configs (group_id, data, extra) VALUES (?1, ?2, ?3) RETURNING id",
+            )?;
+
+            for config in configs {
+                let config_json = serde_json::to_string(&config)
+                    .map_err(|e| StorageError::SerializationError(e.to_string()))?;
+
+                let extra = serde_json::to_string(&config.extra())
+                    .map_err(|e| StorageError::SerializationError(e.to_string()))?;
+
+                let mut rows = stmt.query(params![group_id, config_json, extra])?;
+                if let Some(row) = rows.next()? {
+                    let id: i32 = row.get(0)?;
+                    let client_name = config.extra();
+
+                    created_configs.push(XrayOutboundModel::new(id, client_name, config));
+                }
+            }
+        }
+
+        tx.commit()?;
+
+        Ok(ResCreateGroup {
+            id: group_id as i32,
+            name: Some(group_name.to_string()),
+            configs: created_configs,
+        })
+    }
+
+    pub fn update_group(
+        &self,
+        group_id: &i32,
+        group_name: Option<&str>,
         configs: Vec<XrayOutboundClientConfig>,
     ) -> Result<Vec<XrayOutboundModel>, StorageError> {
         let mut conn = self.sq.lock().map_err(|_| StorageError::LockError)?;
         let tx = conn.transaction()?;
 
-        tx.execute(
-            "INSERT OR IGNORE INTO groups (name) VALUES (?1)",
-            params![group_name],
-        )?;
-
-        let group_id: i64 = tx.query_row(
-            "SELECT id FROM groups WHERE name = ?1",
-            params![group_name],
-            |row| row.get(0),
-        )?;
+        if let Some(name) = group_name {
+            tx.execute(
+                "UPDATE groups SET name = ?1 WHERE id = ?2",
+                params![name, group_id],
+            )?;
+        }
 
         tx.execute("DELETE FROM configs WHERE group_id = ?1", params![group_id])?;
 
@@ -156,20 +205,20 @@ impl StorageService {
 
     pub fn get_paginated_group_configs(
         &self,
-        name: &str,
+        group_id: &i32,
         pagination: &PaginationParams,
     ) -> Result<Option<PaginatedConfigs>, StorageError> {
         let conn = self.sq.lock().map_err(|_| StorageError::LockError)?;
 
         let group_id_result: RusqliteResult<i64> =
-            conn.query_row("SELECT id FROM groups WHERE name = ?1", [name], |row| {
+            conn.query_row("SELECT id FROM groups WHERE id = ?1", [group_id], |row| {
                 row.get(0)
             });
 
         let group_id = match group_id_result {
             Ok(id) => id,
             Err(rusqlite::Error::QueryReturnedNoRows) => {
-                return Err(StorageError::GroupNotFound(name.to_string()));
+                return Err(StorageError::GroupNotFound(group_id.to_string()));
             }
             Err(e) => return Err(e.into()),
         };
@@ -181,8 +230,9 @@ impl StorageService {
         )?;
 
         let offset = (pagination.page as i64) * (pagination.limit as i64);
-        let mut stmt =
-            conn.prepare("SELECT id, data, extra FROM configs WHERE group_id = ?1 LIMIT ?2 OFFSET ?3")?;
+        let mut stmt = conn.prepare(
+            "SELECT id, data, extra FROM configs WHERE group_id = ?1 LIMIT ?2 OFFSET ?3",
+        )?;
 
         let configs = stmt
             .query_map(params![group_id, pagination.limit, offset], |row| {
@@ -190,7 +240,8 @@ impl StorageService {
                 let config_json: String = row.get(1)?;
                 let extra: String = row.get(2)?;
 
-                let extra = serde_json::from_str::<ExtraOutboundClientConfig>(&extra).expect("Failed to parse extra");
+                let extra = serde_json::from_str::<ExtraOutboundClientConfig>(&extra)
+                    .expect("Failed to parse extra");
 
                 serde_json::from_str::<XrayOutboundClientConfig>(&config_json)
                     .map_err(|e| {
@@ -243,22 +294,22 @@ impl StorageService {
 
     pub fn get_configs_by_ids(
         &self,
-        ids: &Vec<i32>,
+        config_ids: &Vec<i32>,
     ) -> Result<Vec<XrayOutboundClientConfig>, StorageError> {
         let conn = self.sq.lock().map_err(|_| StorageError::LockError)?;
 
-        if ids.is_empty() {
+        if config_ids.is_empty() {
             return Ok(vec![]);
         }
 
         let placeholders = std::iter::repeat("?")
-            .take(ids.len())
+            .take(config_ids.len())
             .collect::<Vec<_>>()
             .join(",");
         let query = format!("SELECT data FROM configs WHERE id IN ({})", placeholders);
 
         let mut stmt = conn.prepare(&query)?;
-        let configs_iter = stmt.query_map(params_from_iter(ids.iter()), |row| {
+        let configs_iter = stmt.query_map(params_from_iter(config_ids.iter()), |row| {
             let config_json: String = row.get(0)?;
             serde_json::from_str(&config_json).map_err(|e| {
                 rusqlite::Error::FromSqlConversionFailure(
@@ -274,19 +325,26 @@ impl StorageService {
             .map_err(Into::into)
     }
 
-    pub fn list_group_names(&self) -> Result<Vec<String>, StorageError> {
+    pub fn list_groups(&self) -> Result<Vec<SqlGroup>, StorageError> {
         let conn = self.sq.lock().map_err(|_| StorageError::LockError)?;
-        let mut stmt = conn.prepare("SELECT name FROM groups")?;
-        let names_iter = stmt.query_map([], |row| row.get(0))?;
-        names_iter
-            .collect::<RusqliteResult<Vec<String>>>()
-            .map_err(Into::into)
+        let mut stmt = conn.prepare("SELECT id, name FROM groups")?;
+
+        let groups = stmt
+            .query_map([], |row| {
+                Ok(SqlGroup {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(groups)
     }
 
-    pub fn delete_group(&self, name: &str) -> Result<bool, StorageError> {
+    pub fn delete_group(&self, id: &i32) -> Result<bool, StorageError> {
         let conn = self.sq.lock().map_err(|_| StorageError::LockError)?;
 
-        let rows_affected = conn.execute("DELETE FROM groups WHERE name = ?1", [name])?;
+        let rows_affected = conn.execute("DELETE FROM groups WHERE id = ?1", [id])?;
         Ok(rows_affected > 0)
     }
 
@@ -309,6 +367,7 @@ impl StorageService {
         {
             let mut stmt =
                 tx.prepare("INSERT INTO configs (group_id, data) VALUES (?1, ?2) RETURNING id")?;
+
             for (group_id, config) in configs {
                 tx.execute("DELETE FROM configs WHERE group_id = ?1", params![group_id])?;
 

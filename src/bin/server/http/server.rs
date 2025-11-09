@@ -38,18 +38,22 @@ pub fn init() -> tokio::task::JoinHandle<()> {
                 "/groups",
                 Router::new()
                     .nest(
-                        "/{name}",
+                        "/{id}",
                         Router::new()
                             .route(
                                 "/",
                                 get(get_group_by_name)
-                                    .post(create_group)
                                     .put(update_group)
                                     .delete(delete_group),
                             )
                             .route("/configs", get(get_paginated_group_configs)),
                     )
-                    .route("/", get(get_list_group_names).delete(delete_all_groups)),
+                    .route(
+                        "/",
+                        get(get_list_group_names)
+                            .post(create_group)
+                            .delete(delete_all_groups),
+                    ),
             )
             .nest(
                 "/xray",
