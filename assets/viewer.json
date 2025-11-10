@@ -55,7 +55,7 @@
         "server_name": "pqh23v4.hiddendom.shop",
         "utls": { "enabled": true, "fingerprint": "chrome" }
       },
-      "transport": { "type": "grpc" },
+      "network": { "type": "grpc" },
       "type": "vless",
       "uuid": "401374e6-df77-41fb-f638-dad8184f175b"
     },

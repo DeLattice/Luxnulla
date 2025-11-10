@@ -123,18 +123,16 @@ pub async fn delete_group(
         .collect::<Vec<i32>>();
 
     match delete_outbounds(&config_ids) {
-        Ok(_) => {
-            match storage.delete_group(&id) {
-                Ok(_) => (StatusCode::OK).into_response(),
-                Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({
-                        "error": "Failed to retrieve groups",
-                        "details": e.to_string()
-                    })),
-                )
-                    .into_response(),
-            }
+        Ok(_) => match storage.delete_group(&id) {
+            Ok(_) => (StatusCode::OK).into_response(),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "error": "Failed to retrieve groups",
+                    "details": e.to_string()
+                })),
+            )
+                .into_response(),
         },
         Err(e) => {
             return (

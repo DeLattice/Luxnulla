@@ -15,7 +15,7 @@ pub struct Vless {
     user: User,
     address: String,
     port: u16,
-    transport: String,
+    network: String,
     security: Option<String>,
     path: Option<String>,
     host: Option<String>,
@@ -46,7 +46,7 @@ impl ClientConfigCommon for Vless {
 pub trait VlessClientConfigAccessor {
     fn user(&self) -> Option<&User>;
     fn security(&self) -> Option<&str>;
-    fn transport(&self) -> Option<&str>;
+    fn network(&self) -> Option<&str>;
     fn reality_settings(&self) -> Option<&RealitySettings>;
     fn grpc_settings(&self) -> Option<&GRPCSettings>;
     fn tls_settings(&self) -> Option<&TlsSettings>;
@@ -61,8 +61,8 @@ impl VlessClientConfigAccessor for Vless {
         self.security.as_deref()
     }
 
-    fn transport(&self) -> Option<&str> {
-        Some(&self.transport)
+    fn network(&self) -> Option<&str> {
+        Some(&self.network)
     }
 
     fn reality_settings(&self) -> Option<&RealitySettings> {
@@ -96,7 +96,7 @@ impl Parser for Vless {
             .port()
             .ok_or(ParseError::FieldMissing("port".to_string()))?;
 
-        let transport = query
+        let network = query
             .get("type")
             .ok_or(ParseError::FieldMissing("type".to_string()))?
             .to_string();
@@ -187,7 +187,7 @@ impl Parser for Vless {
             },
             address,
             port,
-            transport,
+            network,
             extra,
             security: query.get("security").cloned(),
             path: query.get("path").cloned(),

@@ -333,7 +333,7 @@ impl StorageService {
             let extra = serde_json::from_str::<Option<ExtraOutboundClientConfig>>(&extra_json)
                 .map_err(|e| StorageError::DeserializationError(e.to_string()))?;
 
-            config.tag = Some(format!("outbound-{}", id));
+            config.tag = Some(id.to_string());
 
             models.push(XrayOutboundModel::new(id, extra, config));
         }

@@ -1,4 +1,7 @@
-use base64::{Engine, prelude::BASE64_URL_SAFE};
+use base64::{
+    Engine,
+    prelude::{BASE64_STANDARD, BASE64_URL_SAFE},
+};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -119,7 +122,7 @@ pub fn decode_config_from_base64(
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let body = payload.trim();
 
-    let content = match BASE64_URL_SAFE.decode(body) {
+    let content = match BASE64_STANDARD.decode(body) {
         Ok(decoded_bytes) => match String::from_utf8(decoded_bytes) {
             Ok(decoded_string) => decoded_string,
             Err(e) => {

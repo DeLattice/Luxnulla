@@ -8,7 +8,7 @@ use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::http::handlers::xray::{
-    apply_outbounds, delete_outbounds, get_outbounds, get_xray_status, toggle_xray,
+    apply_outbounds, delete_outbounds, get_outbounds, get_xray_config, get_xray_status, toggle_xray,
 };
 use crate::http::handlers::{
     groups::{
@@ -63,6 +63,7 @@ pub fn init() -> tokio::task::JoinHandle<()> {
                             .delete(delete_outbounds),
                     )
                     .route("/{action}", post(toggle_xray))
+                    .route("/config", get(get_xray_config))
                     .route("/ping", post(check_configs)),
             )
             .with_state(storage_service_state)

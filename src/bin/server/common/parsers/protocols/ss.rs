@@ -19,7 +19,7 @@ pub struct Shadowsocks {
 pub trait ShadowsocksClientConfigAccessor {
     fn method(&self) -> &str;
     fn password(&self) -> &str;
-    fn transport(&self) -> Option<&str>;
+    fn network(&self) -> Option<&str>;
 }
 
 impl ClientConfigCommon for Shadowsocks {
@@ -49,7 +49,7 @@ impl ShadowsocksClientConfigAccessor for Shadowsocks {
         &self.password.as_ref()
     }
 
-    fn transport(&self) -> Option<&str> {
+    fn network(&self) -> Option<&str> {
         Some("tcp")
     }
 }

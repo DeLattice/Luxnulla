@@ -131,7 +131,7 @@ pub struct User {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct StreamSettings {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub transport: Option<String>,
+    pub network: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub security: Option<String>,
@@ -236,12 +236,12 @@ impl XrayOutboundClientConfig {
                     }
                     _ => None,
                 },
-                transport: match config {
+                network: match config {
                     OutboundClientConfig::Vless(vless_config) => {
-                        vless_config.transport().map(|e| e.to_string())
+                        vless_config.network().map(|e| e.to_string())
                     }
                     OutboundClientConfig::Shadowsocks(ss_config) => {
-                        ss_config.transport().map(|e| e.to_string())
+                        ss_config.network().map(|e| e.to_string())
                     }
                     _ => None,
                 },

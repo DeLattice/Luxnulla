@@ -1,8 +1,12 @@
 use axum::{Json, extract::Path, response::IntoResponse};
+use luxnulla::XRAY_CONFIG_FILE;
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::{http::services::model::xray_config::XrayOutboundClientConfig, services::xray};
+use crate::{
+    http::services::model::xray_config::XrayOutboundClientConfig,
+    services::xray::{self, file::XrayFileCore},
+};
 
 #[axum::debug_handler]
 pub async fn get_xray_status() -> impl IntoResponse {
@@ -95,6 +99,20 @@ pub async fn delete_outbounds(Json(configs): Json<Vec<i32>>) -> impl IntoRespons
             ),
         }
         .into_response(),
+        Err(err) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("Failed to use config: {}", err)})),
+        )
+            .into_response(),
+    }
+}
+
+#[axum::debug_handler]
+pub async fn get_xray_config() -> impl IntoResponse {
+    let xray_core = XrayFileCore::new(XRAY_CONFIG_FILE);
+
+    match xray_core.read_xray_file() {
+        Ok(config) => (StatusCode::OK, Json(config)).into_response(),
         Err(err) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": format!("Failed to use config: {}", err)})),

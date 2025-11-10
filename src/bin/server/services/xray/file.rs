@@ -139,12 +139,8 @@ impl XrayFileCore {
             if let Some(outbounds_array) = outbounds_value.as_array_mut() {
                 outbounds_array.retain(|outbound| {
                     if let Some(tag) = outbound.get("tag").and_then(|v| v.as_str()) {
-                        if let Some(id_str) = tag.strip_prefix("outbound-") {
-                            if let Ok(id) = id_str.parse::<i32>() {
-                                id != *outbound_id
-                            } else {
-                                true
-                            }
+                        if let Ok(id) = tag.parse::<i32>() {
+                            id != *outbound_id
                         } else {
                             true
                         }
@@ -206,5 +202,14 @@ impl XrayFileCore {
         let file = File::open(&self.xray_config_path)?;
         let xray_settings_file: PartialXraySettingsFile = serde_json::from_reader(file)?;
         Ok(xray_settings_file.outbounds.unwrap_or_default())
+    }
+
+    pub fn read_xray_file(&self) -> Result<Value, Box<dyn std::error::Error>> {
+        if !self.xray_config_path.exists() {
+            return Ok(json!({}));
+        }
+        let file = File::open(&self.xray_config_path)?;
+        let xray_settings_file: Value = serde_json::from_reader(file)?;
+        Ok(xray_settings_file)
     }
 }
