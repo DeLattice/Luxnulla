@@ -85,6 +85,25 @@ pub async fn apply_outbounds(Json(configs): Json<Vec<i32>>) -> impl IntoResponse
 }
 
 #[axum::debug_handler]
+pub async fn delete_outbounds(Json(configs): Json<Vec<i32>>) -> impl IntoResponse {
+    match xray::outbounds::delete_outbounds(&configs) {
+        Ok(configs) => match xray::restart_xray().await {
+            Ok(_) => (StatusCode::OK, Json(json!(configs))),
+            Err(err) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to restart Xray: {}", err)})),
+            ),
+        }
+        .into_response(),
+        Err(err) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("Failed to use config: {}", err)})),
+        )
+            .into_response(),
+    }
+}
+
+#[axum::debug_handler]
 pub async fn check_configs(Json(req): Json<Vec<XrayOutboundClientConfig>>) -> impl IntoResponse {
     xray::checker::ping(req);
 

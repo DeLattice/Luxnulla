@@ -13,20 +13,21 @@ use serde_json::json;
 use std::sync::Arc;
 
 use crate::{
-    http::{
-        common::groups::process_config, services::model::xray_config::XrayOutboundClientConfig,
+    http::common::groups::process_config,
+    services::{
+        Group, StorageService, XrayOutboundModel, common::paginator::PaginationParams,
+        xray::outbounds::delete_outbounds,
     },
-    services::{StorageService, XrayOutboundModel, common::paginator::PaginationParams},
 };
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct ReqCreateGroup {
+pub struct CreateGroup {
     name: String,
     configs: Vec<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct ResCreateGroup {
+pub struct CreateGroupResponse {
     pub id: i32,
     pub name: Option<String>,
     pub configs: Vec<XrayOutboundModel>,
@@ -34,7 +35,7 @@ pub struct ResCreateGroup {
 
 pub async fn create_group(
     State(storage): State<Arc<StorageService>>,
-    Json(req): Json<ReqCreateGroup>,
+    Json(req): Json<CreateGroup>,
 ) -> impl IntoResponse {
     let configs = stream::iter(req.configs)
         .then(async |raw| process_config(&raw).await)
@@ -56,38 +57,6 @@ pub async fn create_group(
     }
 }
 
-pub async fn get_list_group_names(State(storage): State<Arc<StorageService>>) -> impl IntoResponse {
-    match storage.list_groups() {
-        Ok(groups) => (StatusCode::OK, Json(json!(groups))).into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({
-                "error": "Failed to retrieve groups",
-                "details": e.to_string()
-            })),
-        )
-            .into_response(),
-    }
-}
-
-pub async fn get_paginated_group_configs(
-    State(storage): State<Arc<StorageService>>,
-    Path(id): Path<i32>,
-    Query(pagination): Query<PaginationParams>,
-) -> impl IntoResponse {
-    match storage.get_paginated_group_configs(&id, &pagination) {
-        Ok(data) => (StatusCode::OK, Json(json!(data.unwrap().configs))).into_response(),
-        Err(e) => (
-            StatusCode::NOT_FOUND,
-            Json(json!({
-                "error": "Failed to retrieve groups",
-                "details": e.to_string()
-            })),
-        )
-            .into_response(),
-    }
-}
-
 #[derive(Deserialize, Serialize, Debug)]
 pub struct UpdateGroup {
     name: String,
@@ -97,7 +66,7 @@ pub struct UpdateGroup {
 #[derive(Deserialize, Serialize)]
 pub struct UpdateGroupResponse {
     name: String,
-    configs: Vec<XrayOutboundClientConfig>,
+    configs: Vec<XrayOutboundModel>,
 }
 
 //todo rename group if get different (req != payload.name) name
@@ -133,16 +102,50 @@ pub async fn delete_group(
     State(storage): State<Arc<StorageService>>,
     Path(id): Path<i32>,
 ) -> impl IntoResponse {
-    match storage.delete_group(&id) {
-        Ok(_) => (StatusCode::OK).into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({
-                "error": "Failed to retrieve groups",
-                "details": e.to_string()
-            })),
-        )
-            .into_response(),
+    let group = match storage.get_group(&id) {
+        Ok(group) => group,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "error": "Failed to retrieve group",
+                    "details": e.to_string()
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    let config_ids = group
+        .configs
+        .iter()
+        .map(|config| config.id)
+        .collect::<Vec<i32>>();
+
+    match delete_outbounds(&config_ids) {
+        Ok(_) => {
+            match storage.delete_group(&id) {
+                Ok(_) => (StatusCode::OK).into_response(),
+                Err(e) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({
+                        "error": "Failed to retrieve groups",
+                        "details": e.to_string()
+                    })),
+                )
+                    .into_response(),
+            }
+        },
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "error": "Failed to delete outbounds",
+                    "details": e.to_string()
+                })),
+            )
+                .into_response();
+        }
     }
 }
 
@@ -162,14 +165,46 @@ pub async fn delete_all_groups(State(storage): State<Arc<StorageService>>) -> im
 }
 
 #[axum::debug_handler]
-pub async fn get_group_by_name(
+pub async fn get_group(
     State(storage): State<Arc<StorageService>>,
-    Path(name): Path<String>,
+    Path(id): Path<i32>,
 ) -> impl IntoResponse {
-    match storage.get_group(&name) {
+    match storage.get_group(&id) {
         Ok(group) => (StatusCode::OK, Json(json!(group))).into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "error": "Failed to retrieve groups",
+                "details": e.to_string()
+            })),
+        )
+            .into_response(),
+    }
+}
+
+pub async fn get_list_group_names(State(storage): State<Arc<StorageService>>) -> impl IntoResponse {
+    match storage.list_groups() {
+        Ok(groups) => (StatusCode::OK, Json(json!(groups))).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "error": "Failed to retrieve groups",
+                "details": e.to_string()
+            })),
+        )
+            .into_response(),
+    }
+}
+
+pub async fn get_paginated_group_configs(
+    State(storage): State<Arc<StorageService>>,
+    Path(id): Path<i32>,
+    Query(pagination): Query<PaginationParams>,
+) -> impl IntoResponse {
+    match storage.get_paginated_group_configs(&id, &pagination) {
+        Ok(data) => (StatusCode::OK, Json(json!(data.unwrap().configs))).into_response(),
+        Err(e) => (
+            StatusCode::NOT_FOUND,
             Json(json!({
                 "error": "Failed to retrieve groups",
                 "details": e.to_string()

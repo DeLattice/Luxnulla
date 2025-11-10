@@ -7,10 +7,12 @@ use std::sync::Arc;
 use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
 
-use crate::http::handlers::xray::{apply_outbounds, get_outbounds, get_xray_status, toggle_xray};
+use crate::http::handlers::xray::{
+    apply_outbounds, delete_outbounds, get_outbounds, get_xray_status, toggle_xray,
+};
 use crate::http::handlers::{
     groups::{
-        create_group, delete_all_groups, delete_group, get_group_by_name, get_list_group_names,
+        create_group, delete_all_groups, delete_group, get_group, get_list_group_names,
         get_paginated_group_configs, update_group,
     },
     xray::check_configs,
@@ -40,12 +42,7 @@ pub fn init() -> tokio::task::JoinHandle<()> {
                     .nest(
                         "/{id}",
                         Router::new()
-                            .route(
-                                "/",
-                                get(get_group_by_name)
-                                    .put(update_group)
-                                    .delete(delete_group),
-                            )
+                            .route("/", get(get_group).put(update_group).delete(delete_group))
                             .route("/configs", get(get_paginated_group_configs)),
                     )
                     .route(
@@ -59,7 +56,12 @@ pub fn init() -> tokio::task::JoinHandle<()> {
                 "/xray",
                 Router::new()
                     .route("/", get(get_xray_status))
-                    .route("/outbounds", get(get_outbounds).post(apply_outbounds))
+                    .route(
+                        "/outbounds",
+                        get(get_outbounds)
+                            .post(apply_outbounds)
+                            .delete(delete_outbounds),
+                    )
                     .route("/{action}", post(toggle_xray))
                     .route("/ping", post(check_configs)),
             )

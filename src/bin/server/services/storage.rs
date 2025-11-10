@@ -5,7 +5,7 @@ use std::fs;
 use std::sync::{Arc, Mutex};
 
 use crate::common::parsers::outbound::ExtraOutboundClientConfig;
-use crate::http::handlers::groups::ResCreateGroup;
+use crate::http::handlers::groups::CreateGroupResponse;
 use crate::http::services::model::xray_config::XrayOutboundClientConfig;
 use crate::services::common::paginator::PaginationParams;
 
@@ -116,7 +116,7 @@ impl StorageService {
         &self,
         group_name: &str,
         configs: Vec<XrayOutboundClientConfig>,
-    ) -> Result<ResCreateGroup, StorageError> {
+    ) -> Result<CreateGroupResponse, StorageError> {
         let mut conn = self.sq.lock().map_err(|_| StorageError::LockError)?;
         let tx = conn.transaction()?;
 
@@ -150,7 +150,7 @@ impl StorageService {
 
         tx.commit()?;
 
-        Ok(ResCreateGroup {
+        Ok(CreateGroupResponse {
             id: group_id as i32,
             name: Some(group_name.to_string()),
             configs: created_configs,
@@ -238,9 +238,9 @@ impl StorageService {
             .query_map(params![group_id, pagination.limit, offset], |row| {
                 let config_id: i32 = row.get(0)?;
                 let config_json: String = row.get(1)?;
-                let extra: String = row.get(2)?;
+                let config_extra: String = row.get(2)?;
 
-                let extra = serde_json::from_str::<ExtraOutboundClientConfig>(&extra)
+                let extra = serde_json::from_str::<ExtraOutboundClientConfig>(&config_extra)
                     .expect("Failed to parse extra");
 
                 serde_json::from_str::<XrayOutboundClientConfig>(&config_json)
@@ -261,35 +261,42 @@ impl StorageService {
         }))
     }
 
-    pub fn get_group(&self, name: &str) -> Result<Option<Group>, StorageError> {
+    pub fn get_group(&self, id: &i32) -> Result<Group, StorageError> {
         let conn = self.sq.lock().map_err(|_| StorageError::LockError)?;
 
-        let group_id_result: RusqliteResult<i64> =
-            conn.query_row("SELECT id FROM groups WHERE name = ?1", [name], |row| {
+        let group_name_result: RusqliteResult<String> =
+            conn.query_row("SELECT name FROM groups WHERE id = ?1", [id], |row| {
                 row.get(0)
             });
 
-        let group_id = match group_id_result {
-            Ok(id) => id,
-            Err(rusqlite::Error::QueryReturnedNoRows) => return Ok(None),
+        let group_name = match group_name_result {
+            Ok(name) => name,
             Err(e) => return Err(e.into()),
         };
 
-        let mut stmt = conn.prepare("SELECT data FROM configs WHERE group_id = ?1")?;
+        let mut stmt = conn.prepare("SELECT id, extra, data FROM configs WHERE group_id = ?1")?;
         let configs = stmt
-            .query_map([group_id], |row| {
-                let config_json: String = row.get(0)?;
-                serde_json::from_str(&config_json).map_err(|e| {
-                    rusqlite::Error::FromSqlConversionFailure(
-                        0,
-                        rusqlite::types::Type::Text,
-                        Box::new(e),
-                    )
-                })
+            .query_map([id], |row| {
+                let config_id: i32 = row.get(0)?;
+                let config_extra: String = row.get(1)?;
+                let config_json: String = row.get(2)?;
+
+                let extra = serde_json::from_str::<ExtraOutboundClientConfig>(&config_extra)
+                    .expect("Failed to parse extra");
+
+                serde_json::from_str(&config_json)
+                    .map(|config| XrayOutboundModel::new(config_id, Some(extra), config))
+                    .map_err(|e| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            0,
+                            rusqlite::types::Type::Text,
+                            Box::new(e),
+                        )
+                    })
             })?
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(Some(Group::new(name.to_string(), configs)))
+        Ok(Group::new(group_name.to_string(), configs))
     }
 
     pub fn get_configs_by_ids(
@@ -306,23 +313,32 @@ impl StorageService {
             .take(config_ids.len())
             .collect::<Vec<_>>()
             .join(",");
-        let query = format!("SELECT data FROM configs WHERE id IN ({})", placeholders);
+
+        let query = format!(
+            "SELECT id, data, extra FROM configs WHERE id IN ({})",
+            placeholders
+        );
 
         let mut stmt = conn.prepare(&query)?;
-        let configs_iter = stmt.query_map(params_from_iter(config_ids.iter()), |row| {
-            let config_json: String = row.get(0)?;
-            serde_json::from_str(&config_json).map_err(|e| {
-                rusqlite::Error::FromSqlConversionFailure(
-                    0,
-                    rusqlite::types::Type::Text,
-                    Box::new(e),
-                )
-            })
-        })?;
+        let mut models = vec![];
+        let mut rows = stmt.query(params_from_iter(config_ids.iter()))?;
 
-        configs_iter
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(Into::into)
+        while let Some(row) = rows.next()? {
+            let id: i32 = row.get(0)?;
+            let config_json: String = row.get(1)?;
+            let extra_json: String = row.get(2)?;
+
+            let mut config = serde_json::from_str::<XrayOutboundClientConfig>(&config_json)
+                .map_err(|e| StorageError::DeserializationError(e.to_string()))?;
+            let extra = serde_json::from_str::<Option<ExtraOutboundClientConfig>>(&extra_json)
+                .map_err(|e| StorageError::DeserializationError(e.to_string()))?;
+
+            config.tag = Some(format!("outbound-{}", id));
+
+            models.push(XrayOutboundModel::new(id, extra, config));
+        }
+
+        Ok(models.into_iter().map(|model| model.config).collect())
     }
 
     pub fn list_groups(&self) -> Result<Vec<SqlGroup>, StorageError> {
