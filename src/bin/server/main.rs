@@ -3,7 +3,7 @@ use eyre::{Error, OptionExt};
 use luxnulla::{CONFIG_DIR, XRAY_CONFIG_FILE};
 use mimalloc::MiMalloc;
 
-mod client_handler;
+mod utils;
 mod common;
 mod handlers;
 mod http;

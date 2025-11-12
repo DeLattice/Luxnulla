@@ -7,8 +7,12 @@ use std::sync::Arc;
 use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
 
-use crate::http::handlers::xray::{
-    apply_outbounds, delete_outbounds, get_outbounds, get_xray_config, get_xray_status, toggle_xray,
+use crate::http::handlers::{
+    groups::refresh_group,
+    xray::{
+        apply_outbounds, delete_outbounds, get_outbounds, get_xray_config, get_xray_status,
+        toggle_xray,
+    },
 };
 use crate::http::handlers::{
     groups::{
@@ -42,7 +46,13 @@ pub fn init() -> tokio::task::JoinHandle<()> {
                     .nest(
                         "/{id}",
                         Router::new()
-                            .route("/", get(get_group).put(update_group).delete(delete_group))
+                            .route(
+                                "/",
+                                get(get_group)
+                                    .put(update_group)
+                                    .delete(delete_group)
+                                    .patch(refresh_group),
+                            )
                             .route("/configs", get(get_paginated_group_configs)),
                     )
                     .route(

@@ -1,6 +1,6 @@
 use base64::{
     Engine,
-    prelude::{BASE64_STANDARD, BASE64_URL_SAFE},
+    prelude::{BASE64_STANDARD},
 };
 use serde::{Deserialize, Serialize};
 use url::Url;

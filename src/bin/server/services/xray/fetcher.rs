@@ -14,7 +14,7 @@ pub async fn get_configs(
         }
     };
 
-    let raw_subs = match parsers::outbound::decode_config_from_base64(body.as_str()) {
+    let configs = match parsers::outbound::decode_config_from_base64(body.as_str()) {
         Ok(subs) => subs,
         Err(e) => {
             eprintln!("Error decoding config: {}", e);
@@ -22,7 +22,7 @@ pub async fn get_configs(
         }
     };
 
-    let subs = match parsers::outbound::work(raw_subs.as_str()) {
+    let subs = match parsers::outbound::work(configs.as_str()) {
         Ok(subs) => subs,
         Err(e) => {
             eprintln!("Error processing config: {:?}", e);

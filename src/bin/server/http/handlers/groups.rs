@@ -11,25 +11,37 @@ use futures::{
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
+use url::Url;
 
 use crate::{
-    http::common::groups::process_config,
+    http::{
+        common::groups::process_config, services::model::xray_config::XrayOutboundClientConfig,
+    },
     services::{
-        Group, StorageService, XrayOutboundModel, common::paginator::PaginationParams,
-        xray::outbounds::delete_outbounds,
+        StorageService, XrayOutboundModel,
+        common::paginator::PaginationParams,
+        xray::{self, outbounds::delete_outbounds},
     },
 };
 
+//todo make multi type | one for subsystem group and one for subsystem REST API
 #[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateGroup {
     name: String,
+    sub_url: Option<Url>,
     configs: Vec<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateGroupResponse {
     pub id: i32,
     pub name: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sub_url: Option<Url>,
+
     pub configs: Vec<XrayOutboundModel>,
 }
 
@@ -44,7 +56,7 @@ pub async fn create_group(
         .collect::<Vec<_>>()
         .await;
 
-    match storage.create_group(&req.name, configs) {
+    match storage.create_group(&req.name, configs, req.sub_url) {
         Ok(group_configs) => (StatusCode::CREATED, Json(json!(group_configs))).into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -173,6 +185,50 @@ pub async fn get_group(
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({
                 "error": "Failed to retrieve groups",
+                "details": e.to_string()
+            })),
+        )
+            .into_response(),
+    }
+}
+
+#[axum::debug_handler]
+pub async fn refresh_group(
+    State(storage): State<Arc<StorageService>>,
+    Path(id): Path<i32>,
+) -> impl IntoResponse {
+    match storage.get_group(&id) {
+        Ok(group) => {
+            let sub_url = group
+                .sub_url
+                .ok_or_else(|| {
+                    std::io::Error::new(std::io::ErrorKind::InvalidInput, "Group has no sub_url")
+                })
+                .unwrap();
+
+            match xray::fetcher::get_configs(sub_url.as_str()).await {
+                Ok(configs) => {
+                    let configs = configs
+                        .into_iter()
+                        .map(|config| XrayOutboundClientConfig::new(&config))
+                        .collect::<Vec<_>>();
+
+                    (StatusCode::OK, Json(json!(configs))).into_response()
+                }
+                Err(e) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({
+                        "error": "Failed to fetch configs from sub_url",
+                        "details": e.to_string()
+                    })),
+                )
+                    .into_response(),
+            }
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "error": "Failed to retrieve group",
                 "details": e.to_string()
             })),
         )
