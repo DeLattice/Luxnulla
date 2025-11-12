@@ -9,14 +9,17 @@ use crate::common::parsers::outbound::ExtraOutboundClientConfig;
 use crate::http::services::model::xray_config::XrayOutboundClientConfig;
 use crate::services::common::paginator::PaginationParams;
 
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct GroupModel {
-    id: i32,
-    name: Option<String>,
+pub struct GroupModel {
+    pub id: i32,
+    pub name: String,
+    pub subscribe_url: Option<Url>,
+}
 
-    #[serde(skip_serializing_if = "Option::is_none")]
-    sub_url: Option<Url>,
+pub struct ConfigModel {
+    pub id: i32,
+    pub group_id: i32,
+    pub data: String,
+    pub extra: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,10 +46,7 @@ impl Group {
 pub struct XrayOutboundModel {
     pub id: i32,
 
-    #[serde(
-        rename(serialize = "extra", deserialize = "extra"),
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub extra: Option<ExtraOutboundClientConfig>,
 
     #[serde(flatten)]
@@ -120,53 +120,22 @@ impl StorageService {
 
     pub fn create_group(
         &self,
-        group_name: &str,
-        configs: Vec<XrayOutboundClientConfig>,
+        name: &str,
         sub_url: Option<Url>,
     ) -> Result<GroupModel, StorageError> {
         let mut conn = self.sq.lock().map_err(|_| StorageError::LockError)?;
         let tx = conn.transaction()?;
 
-        let sub_url_str: Option<String> = sub_url.as_ref().map(|url| url.to_string());
-
-        tx.execute(
-            "INSERT INTO groups (name, sub_url) VALUES (?1, ?2)",
-            params![group_name, sub_url_str],
-        )?;
-
-        let group_id: i64 = tx.last_insert_rowid();
-
-        let mut created_configs = vec![];
-
-        {
-            let mut stmt = tx.prepare(
-                "INSERT INTO configs (group_id, data, extra) VALUES (?1, ?2, ?3) RETURNING id",
-            )?;
-
-            for config in configs {
-                let config_json = serde_json::to_string(&config)
-                    .map_err(|e| StorageError::SerializationError(e.to_string()))?;
-
-                let extra = serde_json::to_string(&config.extra())
-                    .map_err(|e| StorageError::SerializationError(e.to_string()))?;
-
-                let mut rows = stmt.query(params![group_id, config_json, extra])?;
-                if let Some(row) = rows.next()? {
-                    let id: i32 = row.get(0)?;
-                    let client_name = config.extra();
-
-                    created_configs.push(XrayOutboundModel::new(id, client_name, config));
-                }
-            }
-        }
+        let id = tx
+            .prepare("INSERT INTO groups (name, sub_url) VALUES (?1, ?2) RETURNING id")?
+            .insert(params![name, sub_url.as_ref().map(|url| url.as_str())])?;
 
         tx.commit()?;
 
-        Ok(Group {
-            id: group_id as i32,
-            name: Some(group_name.to_string()),
-            configs: created_configs,
-            sub_url: sub_url,
+        Ok(GroupModel {
+            id: id as i32,
+            name: name.to_string(),
+            subscribe_url: sub_url,
         })
     }
 
@@ -174,47 +143,36 @@ impl StorageService {
         &self,
         id: i32,
         name: Option<&str>,
-        sub_url: Option<Url>,
-        configs: Option<Vec<XrayOutboundClientConfig>>,
-    ) -> Result<Vec<XrayOutboundModel>, StorageError> {
+        sub_url: Option<&Url>,
+    ) -> Result<GroupModel, StorageError> {
         let mut conn = self.sq.lock().map_err(|_| StorageError::LockError)?;
         let tx = conn.transaction()?;
 
-        if let Some(name) = group_name {
-            tx.execute(
-                "UPDATE groups SET name = ?1 WHERE id = ?2",
-                params![name, group_id],
-            )?;
-        }
+        let group = tx
+            .prepare("SELECT * FROM groups WHERE id = ?1")?
+            .query_row(params![id], |row| {
+                Ok(GroupModel {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    subscribe_url: row.get(2)?,
+                })
+            })?;
 
-        tx.execute("DELETE FROM configs WHERE group_id = ?1", params![group_id])?;
+        let name = name.unwrap_or_else(|| &group.name);
+        let sub_url = sub_url.or_else(|| group.subscribe_url.as_ref());
 
-        let mut created_configs = vec![];
-
-        {
-            let mut stmt = tx.prepare(
-                "INSERT INTO configs (group_id, data, extra) VALUES (?1, ?2, ?3) RETURNING id",
-            )?;
-
-            for config in configs {
-                let config_json = serde_json::to_string(&config)
-                    .map_err(|e| StorageError::SerializationError(e.to_string()))?;
-
-                let extra = serde_json::to_string(&config.extra().unwrap())
-                    .map_err(|e| StorageError::SerializationError(e.to_string()))?;
-
-                let mut rows = stmt.query(params![group_id, config_json, extra])?;
-                if let Some(row) = rows.next()? {
-                    let id: i32 = row.get(0)?;
-                    let client_name = config.extra();
-
-                    created_configs.push(XrayOutboundModel::new(id, client_name, config));
-                }
-            }
-        }
+        tx.execute(
+            "UPDATE groups SET name = ?1, sub_url = ?2 WHERE id = ?3",
+            params![name, sub_url, id],
+        )?;
 
         tx.commit()?;
-        Ok(created_configs)
+
+        Ok(GroupModel {
+            id,
+            name: name.to_string(),
+            subscribe_url: sub_url.map(|v| v.to_owned()),
+        })
     }
 
     pub fn get_paginated_group_configs(
@@ -358,15 +316,16 @@ impl StorageService {
         Ok(models.into_iter().map(|model| model.config).collect())
     }
 
-    pub fn list_groups(&self) -> Result<Vec<SqlGroupResult>, StorageError> {
+    pub fn list_groups(&self) -> Result<Vec<GroupModel>, StorageError> {
         let conn = self.sq.lock().map_err(|_| StorageError::LockError)?;
-        let mut stmt = conn.prepare("SELECT id, name FROM groups")?;
+        let mut stmt = conn.prepare("SELECT id, name, sub_url FROM groups")?;
 
         let groups = stmt
             .query_map([], |row| {
-                Ok(SqlGroupResult {
+                Ok(GroupModel {
                     id: row.get(0)?,
                     name: row.get(1)?,
+                    subscribe_url: row.get(2)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;

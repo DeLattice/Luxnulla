@@ -56,8 +56,8 @@ pub async fn create_group(
         .collect::<Vec<_>>()
         .await;
 
-    match storage.create_group(&req.name, configs, req.sub_url) {
-        Ok(group_configs) => (StatusCode::CREATED, Json(json!(group_configs))).into_response(),
+    match storage.create_group(&req.name, req.sub_url) {
+        Ok(group) => (StatusCode::CREATED, Json(json!(group_configs))).into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({
