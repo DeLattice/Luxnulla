@@ -18,10 +18,8 @@ use crate::{
 };
 
 #[axum::debug_handler]
-pub async fn get_xray_status() -> impl IntoResponse {
-    // let status_result = xray::get_xray_status();
-
-    (StatusCode::OK, Json("xxx".to_string())).into_response()
+pub async fn get_xray_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    (StatusCode::OK, Json(state.xray.status().await)).into_response()
 }
 
 #[axum::debug_handler]

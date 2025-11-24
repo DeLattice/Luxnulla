@@ -30,6 +30,10 @@ impl XrayService {
         self.sender.subscribe()
     }
 
+    pub async fn status(&self) -> bool {
+        *self.started.lock().await
+    }
+
     pub async fn start(&self) -> bool {
         let mut started = self.started.lock().await;
         let mut sender_handle = self.sender_handle.lock().await;
