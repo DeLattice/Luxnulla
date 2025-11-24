@@ -4,10 +4,10 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::{
-    common::parsers::outbound::{
-        ClientConfigCommon, ExtraOutboundClientConfig, ParseError, Parser,
+    common::parsers::outbound::{ClientConfigCommon, ParseError, Parser},
+    http::models::xray_config::{
+        ExtraOutboundClientConfig, GRPCSettings, RealitySettings, TlsSettings, User,
     },
-    http::services::model::xray_config::{GRPCSettings, RealitySettings, TlsSettings, User},
 };
 
 #[derive(Debug, Deserialize, Serialize)]

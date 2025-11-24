@@ -5,7 +5,7 @@ use std::sync::Mutex;
 use tokio::process::{Child, Command};
 
 use crate::{
-    http::services::model::xray_config::XrayOutboundClientConfig,
+    http::models::xray_config::XrayOutboundClientConfig,
     services::xray::file::{XrayFileCore, XrayInboundClientConfig, XrayInboundSettings},
 };
 

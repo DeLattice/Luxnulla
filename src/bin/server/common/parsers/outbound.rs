@@ -1,11 +1,10 @@
-use base64::{
-    Engine,
-    prelude::{BASE64_STANDARD},
-};
-use serde::{Deserialize, Serialize};
+use base64::{Engine, prelude::BASE64_STANDARD};
 use url::Url;
 
-use crate::common::parsers::protocols::{ss::Shadowsocks, vless::Vless};
+use crate::{
+    common::parsers::protocols::{ss::Shadowsocks, vless::Vless},
+    http::models::xray_config::ExtraOutboundClientConfig,
+};
 
 #[derive(Debug)]
 pub enum ParseError {
@@ -43,12 +42,6 @@ impl std::fmt::Display for ParseError {
 }
 
 impl std::error::Error for ParseError {}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct ExtraOutboundClientConfig {
-    #[serde(rename = "clientName", skip_serializing_if = "Option::is_none")]
-    pub client_name: Option<String>,
-}
 
 pub trait Parser
 where

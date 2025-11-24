@@ -3,8 +3,9 @@ use percent_encoding;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::common::parsers::outbound::{
-    ClientConfigCommon, ExtraOutboundClientConfig, ParseError, Parser,
+use crate::{
+    common::parsers::outbound::{ClientConfigCommon, ParseError, Parser},
+    http::models::xray_config::ExtraOutboundClientConfig,
 };
 
 #[derive(Debug, Deserialize, Serialize)]

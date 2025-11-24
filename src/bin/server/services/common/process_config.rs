@@ -2,7 +2,7 @@ use base64::{Engine, prelude::BASE64_STANDARD};
 use url::Url;
 
 use crate::{
-    common::parsers::outbound, http::services::model::xray_config::XrayOutboundClientConfig,
+    common::parsers::outbound, http::models::xray_config::XrayOutboundClientConfig,
     services::xray::fetcher::get_configs,
 };
 

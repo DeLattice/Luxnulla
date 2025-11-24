@@ -6,7 +6,8 @@
       "version": "latest",
       "outputs": ["out"]
     },
-    "sql-studio": "latest"
+    "sql-studio": "latest",
+    "gcc":        "latest"
   },
   "shell": {
     "init_hook": [
@@ -15,7 +16,7 @@
     ],
     "scripts": {
       "server": "RUSTFLAGS=-Awarnings cargo run --bin server",
-      "zed": "zeditor .",
+      "zed":    "zeditor .",
       "sqlite": "sql-studio sqlite $HOME/.config/luxnulla/storage.db"
     }
   }

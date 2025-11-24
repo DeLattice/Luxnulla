@@ -7,7 +7,7 @@ use std::{
     path::PathBuf,
 };
 
-use crate::http::services::model::xray_config::XrayOutboundClientConfig;
+use crate::http::models::xray_config::XrayOutboundClientConfig;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct XrayInboundSettings {

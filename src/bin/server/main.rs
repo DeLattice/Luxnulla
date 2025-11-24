@@ -3,11 +3,13 @@ use eyre::{Error, OptionExt};
 use luxnulla::{CONFIG_DIR, XRAY_CONFIG_FILE};
 use mimalloc::MiMalloc;
 
-mod utils;
+use crate::services::db::DbConnection;
+
 mod common;
 mod handlers;
 mod http;
 mod services;
+mod utils;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -26,6 +28,9 @@ async fn main() -> eyre::Result<(), Error> {
     if !config_dir_path.join(XRAY_CONFIG_FILE).exists() {
         std::fs::File::create(&config_dir_path.join(XRAY_CONFIG_FILE)).unwrap();
     }
+
+    let db = DbConnection::new()?;
+    db.init_schema()?;
 
     http::server::init().await.unwrap();
 
