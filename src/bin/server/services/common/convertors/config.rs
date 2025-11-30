@@ -35,7 +35,7 @@ pub fn config_models_to_xray_outbounds(
 }
 
 pub fn xray_outbound_to_config_model(
-    xray: XrayOutboundClientConfigModel,
+    xray: &XrayOutboundClientConfigModel,
     group_id: i32,
 ) -> Result<ConfigModel, serde_json::Error> {
     let data = serde_json::to_string(&xray.config)?;
@@ -51,4 +51,14 @@ pub fn xray_outbound_to_config_model(
         data,
         extra,
     })
+}
+
+pub fn xray_outbounds_to_config_models(
+    configs: &[XrayOutboundClientConfigModel],
+    group_id: i32,
+) -> Result<Vec<ConfigModel>, serde_json::Error> {
+    configs
+        .into_iter()
+        .map(|config| xray_outbound_to_config_model(config, group_id))
+        .collect()
 }

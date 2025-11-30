@@ -1,7 +1,8 @@
 use dirs::{self};
-use luxnulla::{CONFIG_DIR, XRAY_CONFIG_FILE};
+use luxnulla::{CONFIG_DIR, XRAY_CONFIG_FILE, XRAY_LOG_FILE};
 use std::{fs, path::PathBuf};
 
+//$HOME/.config/luxnulla/
 pub fn app_config_dir() -> PathBuf {
     let app_dir = dirs::config_dir()
         .expect("Failed to find config directory.")
@@ -17,4 +18,8 @@ pub fn app_config_dir() -> PathBuf {
 
 pub fn xray_config_file() -> PathBuf {
     app_config_dir().join(XRAY_CONFIG_FILE)
+}
+
+pub fn xray_log_file() -> PathBuf {
+    app_config_dir().join("xray").join(XRAY_LOG_FILE)
 }

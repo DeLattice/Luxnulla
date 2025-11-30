@@ -11,7 +11,7 @@
   },
   "shell": {
     "init_hook": [
-      "rustup default nightly",
+      "rustup default stable",
       "cargo fetch"
     ],
     "scripts": {

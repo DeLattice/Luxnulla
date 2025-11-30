@@ -1,7 +1,7 @@
-use rusqlite::{OptionalExtension, Result as SqliteResult, Transaction, params};
+use rusqlite::{OptionalExtension, Result as SqliteResult, Transaction, params, params_from_iter};
 use serde::{Deserialize, Serialize};
 
-use crate::services::common::paginator::PaginationParams;
+use crate::services::{common::paginator::PaginationParams, db::utils::repeat_vars};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConfigModel {
@@ -49,6 +49,34 @@ impl ConfigRepository {
             .optional()?;
 
         Ok(config)
+    }
+
+    pub fn get_by_ids(tx: &Transaction, ids: &[i32]) -> SqliteResult<Option<Vec<ConfigModel>>> {
+        if ids.is_empty() {
+            return Ok(Some(vec![]));
+        }
+
+        let vars = repeat_vars(ids.len());
+
+        let sql = format!(
+            "SELECT id, group_id, data, extra FROM configs WHERE id IN ({})",
+            vars
+        );
+
+        let mut stmt = tx.prepare(&sql)?;
+
+        let configs = stmt
+            .query_map(rusqlite::params_from_iter(ids.iter().copied()), |row| {
+                Ok(ConfigModel {
+                    id: row.get(0)?,
+                    group_id: row.get(1)?,
+                    data: row.get(2)?,
+                    extra: row.get(3)?,
+                })
+            })?
+            .collect::<SqliteResult<Vec<ConfigModel>>>()?;
+
+        Ok(Some(configs))
     }
 
     pub fn get_by_group_id(tx: &Transaction, group_id: i32) -> SqliteResult<Vec<ConfigModel>> {
@@ -119,9 +147,24 @@ impl ConfigRepository {
         Ok(())
     }
 
-    pub fn delete(tx: &Transaction, id: i32) -> SqliteResult<()> {
-        tx.execute("DELETE FROM configs WHERE id = ?1", params![id])?;
-        Ok(())
+    pub fn delete(tx: &Transaction, id: i32) -> SqliteResult<bool> {
+        let count = tx.execute("DELETE FROM configs WHERE id = ?1", params![id])?;
+        Ok(count > 0)
+    }
+
+    pub fn delete_by_ids(tx: &Transaction, ids: &[i32]) -> SqliteResult<bool> {
+        if ids.is_empty() {
+            return Ok(false);
+        }
+
+        let vars = repeat_vars(ids.len());
+
+        let sql = format!("DELETE FROM configs WHERE id = ({})", vars);
+
+        let mut stmt = tx.prepare(&sql)?;
+        let count = stmt.execute(params_from_iter(ids.iter().copied()))?;
+
+        Ok(count > 0)
     }
 
     pub fn delete_by_group_id(tx: &Transaction, group_id: i32) -> SqliteResult<()> {

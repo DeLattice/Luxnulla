@@ -3,20 +3,15 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-use futures::{StreamExt, stream};
 use serde_json::json;
 use std::sync::Arc;
 use url::Url;
 
 use crate::{
-    http::{models::xray_config::XrayOutboundClientConfig, server::AppState},
+    http::server::AppState,
     services::{
-        common::process_config,
         db::TransactionManager,
-        repository::{
-            config::{ConfigModel, ConfigRepository},
-            group::{GroupModel, GroupRepository},
-        },
+        repository::group::{GroupModel, GroupRepository},
     },
 };
 
@@ -25,7 +20,6 @@ use crate::{
 pub struct CreateGroupRequest {
     pub name: String,
     pub subscribe_url: Option<Url>,
-    pub configs: Vec<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -45,37 +39,8 @@ pub async fn create_group(
 ) -> impl IntoResponse {
     let group = GroupModel::new(payload.name, payload.subscribe_url);
 
-    let count = payload.configs.len();
-    let configs: Vec<XrayOutboundClientConfig> = stream::iter(payload.configs)
-        .map(async |raw| process_config(&raw).await.unwrap_or_default())
-        .buffer_unordered(count)
-        .flat_map(|v| stream::iter(v))
-        .collect()
-        .await;
-
-    if configs.len() == 0 {
-        return (StatusCode::BAD_REQUEST, Json(json!({}))).into_response();
-    }
-
-    let (group_id, ids) = TransactionManager::execute_with_result(&mut state.get_conn(), |tx| {
-        let group_id = GroupRepository::create(&tx, &group)?;
-
-        let ids = configs
-            .iter()
-            .map(|config| {
-                let data = serde_json::to_string(&config).unwrap();
-                let extra = config
-                    .extra()
-                    .and_then(|extra| serde_json::to_string(&extra).ok())
-                    .unwrap_or_default();
-
-                ConfigModel::new(group_id, data, extra)
-            })
-            .map(|model| ConfigRepository::create(&tx, &model))
-            .flatten()
-            .collect::<Vec<_>>();
-
-        Ok((group_id, ids))
+    let group_id = TransactionManager::execute_with_result(&mut state.get_conn(), |tx| {
+        Ok(GroupRepository::create(&tx, &group)?)
     })
     .unwrap();
 
@@ -227,6 +192,27 @@ pub async fn get_list_groups(State(state): State<Arc<AppState>>) -> impl IntoRes
         Err(err) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": err.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+#[axum::debug_handler]
+pub async fn delete_all_groups(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    match TransactionManager::execute_with_result(&mut state.get_conn(), |tx| {
+        let groups = GroupRepository::get_all(&tx)?;
+
+        let result = groups
+            .iter()
+            .map(|group| GroupRepository::delete(&tx, group.id))
+            .collect::<Vec<_>>();
+
+        Ok(result)
+    }) {
+        Ok(_) => (StatusCode::OK).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": e.to_string()})),
         )
             .into_response(),
     }
