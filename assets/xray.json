@@ -1,0 +1,178 @@
+{
+  "dns": {
+    "queryStrategy": "UseIPv4",
+    "servers": ["localhost"],
+    "useSystemHosts": true
+  },
+  "inbounds": [
+    {
+      "port": 18889,
+      "protocol": "dokodemo-door",
+      "settings": {
+        "followRedirect": true,
+        "network": "tcp,udp"
+      },
+      "sniffing": {
+        "destOverride": ["quic", "http"],
+        "enabled": true
+      },
+      "streamSettings": {
+        "sockopt": {
+          "tcpFastOpen": true,
+          "tcpKeepAliveIdle": 300,
+          "tcpcongestion": "bbr",
+          "tproxy": "tproxy"
+        }
+      },
+      "tag": "tproxy-inbound"
+    },
+    {
+      "listen": "0.0.0.0",
+      "port": 1080,
+      "protocol": "socks",
+      "settings": {
+        "auth": "noauth",
+        "udp": true
+      },
+      "tag": "socks-inbound"
+    }
+  ],
+  "log": {
+    "access": "change/access.log",
+    "dnsLog": true,
+    "error": "change/error.log",
+    "logLevel": "info"
+  },
+  "observatory": {
+    "pingConfig": {
+      "connectivity": "",
+      "destination": "https://connectivitycheck.gstatic.com/generate_204",
+      "interval": "1h",
+      "sampling": 3,
+      "timeout": "30s"
+    },
+    "subjectSelector": []
+  },
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "settings": {
+        "domainStrategy": "UseIP"
+      },
+      "streamSettings": {
+        "sockopt": {
+          "mark": 201
+        }
+      },
+      "tag": "direct-outbound"
+    },
+    {
+      "protocol": "dns",
+      "settings": {
+        "domainStrategy": "UseIP"
+      },
+      "streamSettings": {
+        "sockopt": {
+          "mark": 201
+        }
+      },
+      "tag": "dns-outbound"
+    },
+    {
+      "protocol": "blackhole",
+      "settings": {},
+      "tag": "blocked"
+    }
+  ],
+  "routing": {
+    "balancers": [
+      {
+        "fallbackTag": "direct-outbound",
+        "selector": [],
+        "strategy": {
+          "settings": {},
+          "type": "leastPing"
+        },
+        "tag": "balancer"
+      }
+    ],
+    "domainMatcher": "hybrid",
+    "domainStrategy": "AsIs",
+    "rules": [
+      {
+        "domain": ["geosite:category-ads-all"],
+        "outboundTag": "blocked",
+        "type": "field"
+      },
+      {
+        "ip": ["geoip:private"],
+        "outboundTag": "direct-outbound",
+        "type": "field"
+      },
+      {
+        "outboundTag": "direct-outbound",
+        "protocol": ["bittorrent"],
+        "type": "field"
+      },
+      {
+        "domain": [
+          "domain:linuxquestions.org",
+          "domain:psynet.gg",
+          "domain:amazonaws.com",
+          "domain:epicgames.com",
+          "geosite:category-gov-ru",
+          "geosite:epicgames",
+          "domain:su",
+          "domain:tmspk.net",
+          "domain:myteamspeak.com",
+          "domain:ru"
+        ],
+        "outboundTag": "direct-outbound",
+        "type": "field"
+      },
+      {
+        "domain": [
+          "geosite:jetbrains",
+          "geosite:jetbrains-ai",
+          "geosite:google-gemini"
+        ],
+        "outboundTag": "hz-vless-tcp-1",
+        "type": "field"
+      },
+      {
+        "balancerTag": "balancer",
+        "domain": [
+          "geosite:google",
+          "geosite:discord",
+          "geosite:github1s",
+          "geosite:github",
+          "domain:com",
+          "domain:app",
+          "domain:store",
+          "domain:status",
+          "domain:new",
+          "domain:gift",
+          "domain:gifts",
+          "domain:co",
+          "domain:gd",
+          "domain:design",
+          "domain:gg",
+          "domain:media",
+          "domain:dev",
+          "domain:org",
+          "domain:me",
+          "domain:io",
+          "domain:sfedu.ru",
+          "domain:uk",
+          "domain:net"
+        ],
+        "type": "field"
+      },
+      {
+        "balancerTag": "balancer",
+        "inboundTag": ["socks-inbound"],
+        "type": "field"
+      }
+    ]
+  }
+}

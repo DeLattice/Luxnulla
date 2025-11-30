@@ -8,3 +8,5 @@
 .rustup
 .cargo
 target
+
+/static

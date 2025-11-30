@@ -1,11 +1,11 @@
 use crate::common::{
     fetchers,
-    parsers::{self, proxy_config::ProxyConfig},
+    parsers::{self, outbound::OutboundClientConfig},
 };
 
-pub async fn get_configs(url: &str) -> Result<Vec<ProxyConfig>, Box<dyn std::error::Error>> {
-    println!("--- Fetching from plain text URL: {} ---", url);
-
+pub async fn get_configs(
+    url: &str,
+) -> Result<Vec<OutboundClientConfig>, Box<dyn std::error::Error>> {
     let body = match fetchers::config::fetch(url).await {
         Ok(body) => body,
         Err(e) => {
@@ -14,7 +14,7 @@ pub async fn get_configs(url: &str) -> Result<Vec<ProxyConfig>, Box<dyn std::err
         }
     };
 
-    let raw_subs = match parsers::proxy_config::decode_config_from_base64(body.as_str()) {
+    let configs = match parsers::outbound::decode_config_from_base64(body.as_str()) {
         Ok(subs) => subs,
         Err(e) => {
             eprintln!("Error decoding config: {}", e);
@@ -22,7 +22,7 @@ pub async fn get_configs(url: &str) -> Result<Vec<ProxyConfig>, Box<dyn std::err
         }
     };
 
-    let subs = match parsers::proxy_config::work(raw_subs.as_str()) {
+    let subs = match parsers::outbound::work(configs.as_str()) {
         Ok(subs) => subs,
         Err(e) => {
             eprintln!("Error processing config: {:?}", e);

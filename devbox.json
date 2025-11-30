@@ -1,14 +1,29 @@
 {
-    "packages": [
-        "rustup@latest"
+  "packages": {
+    "rustup": "1.28.2",
+    "xray": "latest",
+    "sqlite": {
+      "version": "latest",
+      "outputs": ["out"]
+    },
+    "sql-studio": "latest",
+    "gcc": {
+      "version": "latest",
+      "outputs": ["out"]
+    },
+    "lld": "latest",
+    "pkg-config": "latest",
+    "openssl": "latest"
+  },
+  "shell": {
+    "init_hook": [
+      "rustup default stable",
+      "cargo fetch"
     ],
-    "shell": {
-        "init_hook": [
-            "rustup default nightly",
-            "cargo fetch"
-        ],
-        "scripts": {
-            "server": "cargo run --bin server"
-        }
+    "scripts": {
+      "server": "RUSTFLAGS=-Awarnings cargo run --bin server",
+      "zed": "zeditor .",
+      "sqlite": "sql-studio sqlite $HOME/.config/elux/storage.db"
     }
+  }
 }

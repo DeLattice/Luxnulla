@@ -1,5 +1,5 @@
 [package]
-name = "luxnulla"
+name = "elux"
 version = "1.0.0"
 edition = "2024"
 
@@ -18,12 +18,20 @@ reqwest = { version = "0.12.22", features = [
 ], default-features = false }
 base64 = "0.22.1"
 rand = "0.9.1"
-chrono = { version = "0.4", features = ["serde"] }
-url = "2.5.4"
-axum = { version = "0.8.4", features = ["macros"] }
+url = { version = "2.5.4", features = ["serde"] }
+axum = { version = "0.8.4", features = ["macros", "ws"] }
 tower-http = { version = "0.6.6", features = ["cors"] }
 tower = "0.5.2"
 thiserror = "1.0"
+notify = "8.2.0"
+mimalloc = "0.1.48"
+rusqlite = { version = "0.37.0", features = ["url"] }
+percent-encoding = "2.3.2"
+r2d2 = "0.8.10"
+r2d2_sqlite = "0.31.0"
+tokio-stream = { version = "0.1.17", default-features = true, features = ["full"] }
+mime_guess = "2.0.5"
+rust-embed = "8.9.0"
 
 [dev-dependencies]
 tempfile = "3.8"

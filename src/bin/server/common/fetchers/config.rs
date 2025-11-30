@@ -7,7 +7,8 @@ pub async fn fetch(url: &str) -> Result<String, Box<dyn Error + Send + Sync>> {
         return Err(format!("Request failed with status: {}", response.status()).into());
     }
 
-    let body = response.text().await?;
-
-    Ok(body)
+    match response.text().await {
+        Ok(body) => Ok(body),
+        Err(err) => Err(format!("Failed to read response body: {}", err).into()),
+    }
 }
