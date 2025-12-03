@@ -1,12 +1,9 @@
 use axum::{
     body::Body,
-    http::{header, StatusCode, Uri},
-    response::{IntoResponse, Response},
-    routing::get,
-    Router,
+    http::{StatusCode, Uri, header},
+    response::IntoResponse,
 };
 use rust_embed::RustEmbed;
-use std::net::SocketAddr;
 
 #[derive(RustEmbed)]
 #[folder = "static"]

@@ -1,7 +1,9 @@
 {
   "dns": {
     "queryStrategy": "UseIPv4",
-    "servers": ["localhost"],
+    "servers": [
+      "localhost"
+    ],
     "useSystemHosts": true
   },
   "inbounds": [
@@ -13,7 +15,10 @@
         "network": "tcp,udp"
       },
       "sniffing": {
-        "destOverride": ["quic", "http"],
+        "destOverride": [
+          "quic",
+          "http"
+        ],
         "enabled": true
       },
       "streamSettings": {
@@ -100,18 +105,24 @@
     "domainStrategy": "AsIs",
     "rules": [
       {
-        "domain": ["geosite:category-ads-all"],
+        "domain": [
+          "geosite:category-ads-all"
+        ],
         "outboundTag": "blocked",
         "type": "field"
       },
       {
-        "ip": ["geoip:private"],
+        "ip": [
+          "geoip:private"
+        ],
         "outboundTag": "direct-outbound",
         "type": "field"
       },
       {
         "outboundTag": "direct-outbound",
-        "protocol": ["bittorrent"],
+        "protocol": [
+          "bittorrent"
+        ],
         "type": "field"
       },
       {
@@ -136,7 +147,7 @@
           "geosite:jetbrains-ai",
           "geosite:google-gemini"
         ],
-        "outboundTag": "hz-vless-tcp-1",
+        "outboundTag": "3",
         "type": "field"
       },
       {
@@ -170,7 +181,9 @@
       },
       {
         "balancerTag": "balancer",
-        "inboundTag": ["socks-inbound"],
+        "inboundTag": [
+          "socks-inbound"
+        ],
         "type": "field"
       }
     ]

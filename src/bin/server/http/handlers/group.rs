@@ -10,7 +10,7 @@ use url::Url;
 use crate::{
     http::server::AppState,
     services::{
-        db::TransactionManager,
+        db::transaction::{run_db_transaction, run_transaction},
         repository::group::{GroupModel, GroupRepository},
     },
 };
@@ -39,20 +39,24 @@ pub async fn create_group(
 ) -> impl IntoResponse {
     let group = GroupModel::new(payload.name, payload.subscribe_url);
 
-    let group_id = TransactionManager::execute_with_result(&mut state.get_conn(), |tx| {
-        Ok(GroupRepository::create(&tx, &group)?)
-    })
-    .unwrap();
-
-    (
-        StatusCode::CREATED,
-        Json(CreateGroupResponseSuccess {
-            id: group_id,
-            name: group.name,
-            subscribe_url: group.subscribe_url,
-        }),
-    )
-        .into_response()
+    match run_db_transaction(&mut state.get_conn(), |tx| {
+        GroupRepository::create(&tx, &group)
+    }) {
+        Ok(group_id) => (
+            StatusCode::CREATED,
+            Json(CreateGroupResponseSuccess {
+                id: group_id,
+                name: group.name,
+                subscribe_url: group.subscribe_url,
+            }),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": e.to_string()})),
+        )
+            .into_response(),
+    };
 }
 
 #[derive(serde::Serialize)]
@@ -70,7 +74,7 @@ pub async fn get_group_by_id(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i32>,
 ) -> impl IntoResponse {
-    match TransactionManager::execute_with_result(&mut state.get_conn(), |tx| {
+    match run_db_transaction(&mut state.get_conn(), |tx| {
         GroupRepository::get_by_id(&tx, id)
     }) {
         Ok(group) => match group {
@@ -112,7 +116,7 @@ pub async fn update_group(
     Path(id): Path<i32>,
     Json(payload): Json<UpdateGroupRequest>,
 ) -> impl IntoResponse {
-    let result = TransactionManager::execute_with_result(&mut state.get_conn(), move |tx| {
+    let result = run_db_transaction(&mut state.get_conn(), move |tx| {
         let Some(current_group) = GroupRepository::get_by_id(tx, id)? else {
             return Ok(false);
         };
@@ -149,9 +153,7 @@ pub async fn delete_group(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i32>,
 ) -> impl IntoResponse {
-    match TransactionManager::execute_with_result(&mut state.get_conn(), |tx| {
-        GroupRepository::delete(&tx, id)
-    }) {
+    match run_db_transaction(&mut state.get_conn(), |tx| GroupRepository::delete(&tx, id)) {
         Ok(v) => match v {
             true => (StatusCode::OK).into_response(),
             false => (StatusCode::NOT_FOUND).into_response(),
@@ -174,9 +176,7 @@ pub struct GetListGroupsResponse {
 
 #[axum::debug_handler]
 pub async fn get_list_groups(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    match TransactionManager::execute_with_result(&mut state.get_conn(), |tx| {
-        GroupRepository::get_all(tx)
-    }) {
+    match run_db_transaction(&mut state.get_conn(), |tx| GroupRepository::get_all(tx)) {
         Ok(groups) => {
             let groups = groups
                 .into_iter()
@@ -199,7 +199,7 @@ pub async fn get_list_groups(State(state): State<Arc<AppState>>) -> impl IntoRes
 
 #[axum::debug_handler]
 pub async fn delete_all_groups(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    match TransactionManager::execute_with_result(&mut state.get_conn(), |tx| {
+    match run_db_transaction(&mut state.get_conn(), |tx| {
         let groups = GroupRepository::get_all(&tx)?;
 
         let result = groups

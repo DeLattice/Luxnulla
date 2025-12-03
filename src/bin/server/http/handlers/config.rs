@@ -21,8 +21,9 @@ use crate::{
             paginator::PaginationParams,
             process_config,
         },
-        db::TransactionManager,
+        db::transaction::{run_db_transaction, run_transaction},
         repository::config::{ConfigModel, ConfigRepository},
+        xray,
     },
 };
 
@@ -57,31 +58,34 @@ pub async fn create_configs(
         return (StatusCode::BAD_REQUEST, Json(json!({}))).into_response();
     }
 
-    let result: Result<Vec<XrayOutboundClientConfigModel>, _> =
-        TransactionManager::execute_with_result(&mut state.get_conn(), |tx| {
-            let result = configs
-                .iter()
-                .map(|config| {
-                    let data = serde_json::to_string(&config).unwrap();
-                    let extra = config
-                        .extra()
-                        .and_then(|extra| serde_json::to_string(&extra).ok())
-                        .unwrap_or_default();
+    let result = run_transaction(&mut state.get_conn(), |tx| {
+        let configs = configs
+            .iter()
+            .map(|config| {
+                let data = serde_json::to_string(&config).unwrap();
+                let extra = config
+                    .extra()
+                    .and_then(|extra| serde_json::to_string(&extra).ok())
+                    .unwrap_or_default();
 
-                    ConfigModel::new(group_id, data, extra)
-                })
-                .filter_map(|mut model| {
-                    model.id = ConfigRepository::create(&tx, &model).ok()?;
-                    config_model_to_xray_outbound(model).ok()
-                })
-                .collect();
+                ConfigModel::new(group_id, data, extra)
+            })
+            .filter_map(|mut model| {
+                model.id = ConfigRepository::create(&tx, &model).ok()?;
+                config_model_to_xray_outbound(model).ok()
+            })
+            .collect::<Vec<_>>();
 
-            Ok(result)
-        });
+        Ok(configs)
+    });
 
     match result {
         Ok(configs) => (StatusCode::CREATED, Json(configs)).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json("error".to_string())).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": e.to_string()})),
+        )
+            .into_response(),
     }
 }
 
@@ -90,7 +94,7 @@ pub async fn get_configs_by_group_id(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i32>,
 ) -> impl IntoResponse {
-    match TransactionManager::execute_with_result(&mut state.get_conn(), |tx| {
+    match run_db_transaction(&mut state.get_conn(), |tx| {
         ConfigRepository::get_by_group_id(&tx, id)
     }) {
         Ok(data) => match config_models_to_xray_outbounds(data) {
@@ -115,7 +119,7 @@ pub async fn get_paginated_configs_by_group_id(
     Path(id): Path<i32>,
     Query(pagination): Query<PaginationParams>,
 ) -> impl IntoResponse {
-    match TransactionManager::execute_with_result(&mut state.get_conn(), |tx| {
+    match run_db_transaction(&mut state.get_conn(), |tx| {
         ConfigRepository::get_by_group_id_with_pagination(&tx, id, pagination)
     }) {
         Ok(data) => match config_models_to_xray_outbounds(data) {
@@ -133,68 +137,17 @@ pub async fn get_paginated_configs_by_group_id(
             .into_response(),
     }
 }
-// #[axum::debug_handler]
-// pub async fn get_config(
-//     State(state): State<Arc<AppState>>,
-//     Path((_, config_id)): Path<(i32, i32)>,
-// ) -> impl IntoResponse {
-//     match TransactionManager::execute_with_result(&mut db, |tx| {
-//         ConfigManager::get_in_transaction(tx, config_id)
-//     }) {
-//         Ok(Some(config)) => match config_model_to_xray_outbound(config) {
-//             Ok(data) => (StatusCode::OK, Json(data)).into_response(),
-//             Err(e) => (
-//                 StatusCode::INTERNAL_SERVER_ERROR,
-//                 Json(json!({"error": e.to_string()})),
-//             )
-//                 .into_response(),
-//         },
-//         Ok(None) => (
-//             StatusCode::NOT_FOUND,
-//             Json(json!({"error": "Config not found"})),
-//         )
-//             .into_response(),
-//         Err(e) => (
-//             StatusCode::INTERNAL_SERVER_ERROR,
-//             Json(json!({"error": e.to_string()})),
-//         )
-//             .into_response(),
-//     }
-// }
-//
-
-// #[axum::debug_handler]
-// pub async fn update_config(
-//     State(state): State<Arc<AppState>>,
-//     Path((_, config_id)): Path<(i32, i32)>,
-//     Json(payload): Json<UpdateConfigRequest>,
-// ) -> impl IntoResponse {
-//     let config = ConfigModel {
-//         id: config_id,
-//         group_id: 0,
-//         data: payload.data,
-//         extra: payload.extra,
-//     };
-
-//     match TransactionManager::execute_with_result(&mut db, |tx| {
-//         ConfigManager::update_in_transaction(tx, &config)
-//     }) {
-//         Ok(_) => (StatusCode::OK, Json(json!({"message": "Updated"}))).into_response(),
-//         Err(e) => (
-//             StatusCode::INTERNAL_SERVER_ERROR,
-//             Json(json!({"error": e.to_string()})),
-//         )
-//             .into_response(),
-//     }
-// }
 
 #[axum::debug_handler]
 pub async fn delete_config_by_id(
     State(state): State<Arc<AppState>>,
     Path(config_id): Path<i32>,
 ) -> impl IntoResponse {
-    match TransactionManager::execute_with_result(&mut state.get_conn(), |tx| {
-        ConfigRepository::delete(tx, config_id)
+    match run_transaction(&mut state.get_conn(), |tx| {
+        ConfigRepository::delete(tx, config_id)?;
+        xray::outbounds::delete_outbound(&state.xray_file, config_id)?;
+
+        Ok(true)
     }) {
         Ok(true) => (StatusCode::OK).into_response(),
         Ok(false) => (StatusCode::NOT_FOUND).into_response(),
@@ -219,8 +172,11 @@ pub async fn delete_config_by_ids(
             .into_response();
     }
 
-    match TransactionManager::execute_with_result(&mut state.get_conn(), |tx| {
-        ConfigRepository::delete_by_ids(tx, config_ids.as_slice())
+    match run_transaction(&mut state.get_conn(), |tx| {
+        ConfigRepository::delete_by_ids(tx, config_ids.as_slice())?;
+        xray::outbounds::delete_outbounds(&state.xray_file, &config_ids)?;
+
+        Ok(true)
     }) {
         Ok(true) => (StatusCode::OK).into_response(),
         Ok(false) => (StatusCode::NOT_FOUND).into_response(),

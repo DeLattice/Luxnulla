@@ -10,4 +10,4 @@ pub const XRAY_CHECKER_CONFIG_FILE: &str = "xray_checker.json";
 pub const SOCKET_NAME: &str = "elux-core.sock";
 pub const EDITOR_NAME: &str = "zeditor";
 
-pub const SOCKET: &str = "0.0.0.0:8400";
+pub const SOCKET: &str = "0.0.0.0:8500";

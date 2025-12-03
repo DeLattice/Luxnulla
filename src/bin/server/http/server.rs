@@ -18,6 +18,7 @@ use crate::{
         group_config::refresh_configs_by_group_id,
         xray::{restart_xray, stop_xray, update_xray_config},
     },
+    services::xray::file::core::XrayFileCore,
     utils::config::AppPaths,
 };
 use crate::{
@@ -29,17 +30,14 @@ use crate::{
     services::xray::service::XrayService,
 };
 
-use crate::{
-    http::handlers::xray::{
-        delete_outbounds, get_outbounds, get_xray_config, get_xray_status, start_xray,
-        update_outbounds,
-    },
-    utils,
+use crate::http::handlers::xray::{
+    delete_outbounds, get_outbounds, get_xray_config, get_xray_status, start_xray, update_outbounds,
 };
 
 pub struct AppState {
     pub db_pool: Pool<SqliteConnectionManager>,
     pub xray_service: XrayService,
+    pub xray_file: XrayFileCore,
 }
 
 impl AppState {
@@ -52,7 +50,11 @@ impl AppState {
 
         AppState {
             db_pool: pool,
-            xray_service: XrayService::new(AppPaths::get().xray_config.clone(), AppPaths::get().xray_log.clone()),
+            xray_service: XrayService::new(
+                AppPaths::get().xray_config.clone(),
+                AppPaths::get().xray_log.clone(),
+            ),
+            xray_file: XrayFileCore::new(AppPaths::get().xray_config.clone()),
         }
     }
 
@@ -80,18 +82,21 @@ pub fn init() -> tokio::task::JoinHandle<()> {
                             .post(create_group)
                             .delete(delete_all_groups),
                     )
-                    .route("/configs/{id}", delete(delete_config_by_id))
                     .route(
                         "/{id}",
                         get(get_group_by_id).put(update_group).delete(delete_group),
                     )
                     .route(
                         "/{id}/configs",
-                        post(create_configs)
-                            .get(get_paginated_configs_by_group_id)
-                            .delete(delete_config_by_ids),
+                        post(create_configs).get(get_paginated_configs_by_group_id),
                     )
                     .route("/{id}/refresh", post(refresh_configs_by_group_id)),
+            )
+            .nest(
+                "/configs",
+                Router::new()
+                    .route("/", delete(delete_config_by_ids))
+                    .route("/{id}", delete(delete_config_by_id)),
             )
             .nest(
                 "/xray",

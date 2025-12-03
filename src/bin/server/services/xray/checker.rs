@@ -4,10 +4,7 @@ use elux::{CONFIG_DIR, XRAY_CHECKER_CONFIG_FILE};
 use std::sync::Mutex;
 use tokio::process::{Child, Command};
 
-use crate::{
-    http::models::xray_config::XrayOutboundClientConfig,
-    services::xray::file::{XrayFileCore, XrayInboundClientConfig, XrayInboundSettings},
-};
+use crate::http::models::xray_config::XrayOutboundClientConfig;
 
 static XRAY_CHILD: Mutex<Option<Child>> = Mutex::new(None);
 

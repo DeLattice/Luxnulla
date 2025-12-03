@@ -1,8 +1,6 @@
 use rust_embed::RustEmbed;
 use serde_json::{json, Value};
-use std::{fs, path::PathBuf, sync::OnceLock};
-
-use crate::utils::config::AppPaths;
+use std::{path::PathBuf,};
 
 #[derive(RustEmbed)]
 #[folder = "assets/"]
@@ -26,6 +24,5 @@ pub fn get_nft_config() -> String {
     let file = Assets::get("proxy.conf").expect("nftables.conf missing");
     let content = std::str::from_utf8(file.data.as_ref()).expect("Invalid UTF-8");
 
-    // Пример простой замены
     content.replace("PORT_PLACEHOLDER", "1080")
 }

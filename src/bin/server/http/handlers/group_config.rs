@@ -15,7 +15,7 @@ use crate::{
             convertors::{config_model_to_xray_outbound, config_models_to_xray_outbounds},
             process_config,
         },
-        db::TransactionManager,
+        db::transaction::{run_db_transaction, run_transaction},
         repository::{
             config::{ConfigModel, ConfigRepository},
             group::GroupRepository,
@@ -37,7 +37,7 @@ pub async fn get_group_with_configs(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i32>,
 ) -> impl IntoResponse {
-    match TransactionManager::execute_with_result(&mut state.get_conn(), |tx| {
+    match run_db_transaction(&mut state.get_conn(), |tx| {
         let Some(group) = GroupRepository::get_by_id(tx, id)? else {
             return Ok(None);
         };
@@ -72,7 +72,7 @@ pub async fn refresh_configs_by_group_id(
     State(state): State<Arc<AppState>>,
     Path(group_id): Path<i32>,
 ) -> impl IntoResponse {
-    let group = TransactionManager::execute_with_result(&mut state.get_conn(), |tx| {
+    let group = run_db_transaction(&mut state.get_conn(), |tx| {
         GroupRepository::get_by_id(tx, group_id)
     });
 
@@ -88,7 +88,7 @@ pub async fn refresh_configs_by_group_id(
 
             let configs = process_config(current_sub_url.as_str()).await.unwrap();
 
-            match TransactionManager::execute_with_result(&mut state.get_conn(), |tx| {
+            match run_transaction(&mut state.get_conn(), |tx| {
                 ConfigRepository::delete_by_group_id(&tx, group_id)?;
 
                 let result = configs

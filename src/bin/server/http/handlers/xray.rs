@@ -1,27 +1,28 @@
-use std::{process::Stdio, sync::Arc};
-
 use axum::{
     Json,
     extract::{
-        Path, State, WebSocketUpgrade,
-        ws::{CloseFrame, Message, Utf8Bytes, WebSocket},
+        State, WebSocketUpgrade,
+        ws::{Message, Utf8Bytes, WebSocket},
     },
     response::IntoResponse,
 };
-use elux::XRAY_CONFIG_FILE;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
+use std::sync::Arc;
 use tokio::{
-    fs::{self, File},
+    fs::File,
     io::{AsyncBufReadExt, BufReader},
 };
 
 use crate::{
-    http::{models::xray_config::XrayOutboundClientConfig, server::AppState},
+    http::server::AppState,
     services::{
-        db::TransactionManager,
-        repository::config::{ConfigModel, ConfigRepository},
-        xray::{self, file::XrayFileCore},
+        db::transaction::run_db_transaction,
+        repository::config::ConfigRepository,
+        xray::{
+            self,
+            file::{observatory::ObservatoryOps, routing::RoutingOps},
+        },
     },
     utils::config::AppPaths,
 };
@@ -36,7 +37,7 @@ pub async fn start_xray(State(state): State<Arc<AppState>>) -> impl IntoResponse
     match state.xray_service.start().await {
         true => (StatusCode::OK).into_response(),
         false => (
-            StatusCode::INTERNAL_SERVER_ERROR,
+            StatusCode::LOCKED,
             Json(json!({"error": format!("Failed to start Xray")})),
         )
             .into_response(),
@@ -48,7 +49,7 @@ pub async fn stop_xray(State(state): State<Arc<AppState>>) -> impl IntoResponse 
     match state.xray_service.stop().await {
         true => (StatusCode::OK,).into_response(),
         false => (
-            StatusCode::INTERNAL_SERVER_ERROR,
+            StatusCode::LOCKED,
             Json(json!({"error": format!("Failed to stop Xray")})),
         )
             .into_response(),
@@ -59,8 +60,8 @@ pub async fn stop_xray(State(state): State<Arc<AppState>>) -> impl IntoResponse 
 pub async fn restart_xray(State(state): State<Arc<AppState>>) -> impl IntoResponse {}
 
 #[axum::debug_handler]
-pub async fn get_outbounds() -> impl IntoResponse {
-    match xray::outbounds::get_outbounds() {
+pub async fn get_outbounds(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    match xray::outbounds::get_outbounds(&state.xray_file) {
         Ok(configs) => (StatusCode::OK, Json(configs)).into_response(),
         Err(err) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -75,10 +76,9 @@ pub async fn update_outbounds(
     State(state): State<Arc<AppState>>,
     Json(ids): Json<Vec<i32>>,
 ) -> impl IntoResponse {
-    let configs_from_db_result =
-        TransactionManager::execute_with_result(&mut state.get_conn(), |tx| {
-            ConfigRepository::get_by_ids(tx, ids.as_slice())
-        });
+    let configs_from_db_result = run_db_transaction(&mut state.get_conn(), |tx| {
+        ConfigRepository::get_by_ids(tx, ids.as_slice())
+    });
 
     let configs_to_update = match configs_from_db_result {
         Ok(configs_opt) => configs_opt.unwrap_or_default(),
@@ -91,8 +91,15 @@ pub async fn update_outbounds(
         }
     };
 
-    match xray::outbounds::update_outbounds(configs_to_update.as_slice()) {
-        Ok(updated_configs) => (StatusCode::OK, Json(updated_configs)).into_response(),
+    match xray::outbounds::update_outbounds(&state.xray_file, configs_to_update.as_slice()) {
+        Ok(updated_configs) => {
+            let ids = ids.as_slice();
+
+            state.xray_file.set_balancer_ids(ids);
+            state.xray_file.set_observatory_ids(ids);
+
+            (StatusCode::OK, Json(updated_configs)).into_response()
+        }
         Err(err) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": format!("Failed to update Xray outbounds: {}", err)})),
@@ -102,23 +109,12 @@ pub async fn update_outbounds(
 }
 
 #[axum::debug_handler]
-pub async fn delete_outbounds(Json(configs): Json<Vec<i32>>) -> impl IntoResponse {
-    // match xray::outbounds::delete_outbounds(&configs) {
-    //     Ok(configs) => (StatusCode::OK, Json(configs)).into_response(),
-    //     Err(err) => (
-    //         StatusCode::INTERNAL_SERVER_ERROR,
-    //         Json(json!({"error": format!("Failed to use config: {}", err)})),
-    //     )
-    //         .into_response(),
-    // }
-}
-
-#[axum::debug_handler]
-pub async fn get_xray_config() -> impl IntoResponse {
-    let xray_core = XrayFileCore::new(XRAY_CONFIG_FILE);
-
-    match xray_core.read_xray_file() {
-        Ok(config) => (StatusCode::OK, Json(config)).into_response(),
+pub async fn delete_outbounds(
+    State(state): State<Arc<AppState>>,
+    Json(configs): Json<Vec<i32>>,
+) -> impl IntoResponse {
+    match xray::outbounds::delete_outbounds(&state.xray_file, &configs) {
+        Ok(configs) => (StatusCode::OK, Json(configs)).into_response(),
         Err(err) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": format!("Failed to use config: {}", err)})),
@@ -128,10 +124,19 @@ pub async fn get_xray_config() -> impl IntoResponse {
 }
 
 #[axum::debug_handler]
-pub async fn update_xray_config(Json(config): Json<Value>) -> impl IntoResponse {
-    let xray_core = XrayFileCore::new(XRAY_CONFIG_FILE);
+pub async fn get_xray_config(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    (
+        StatusCode::OK,
+        Json(state.xray_file.read_with_json(|root| root.clone())),
+    )
+}
 
-    match xray_core.write_full_config(&config) {
+#[axum::debug_handler]
+pub async fn update_xray_config(
+    State(state): State<Arc<AppState>>,
+    Json(config): Json<Value>,
+) -> impl IntoResponse {
+    match state.xray_file.write_full_config(&config) {
         Ok(()) => (StatusCode::OK).into_response(),
         Err(err) => (
             StatusCode::INTERNAL_SERVER_ERROR,
