@@ -4,7 +4,6 @@ use mimalloc::MiMalloc;
 use crate::{services::db::DbConnection, utils::config::AppPaths};
 
 mod common;
-mod handlers;
 mod http;
 mod services;
 mod utils;

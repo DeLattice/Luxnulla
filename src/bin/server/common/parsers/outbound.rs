@@ -1,8 +1,10 @@
+use std::string::FromUtf8Error;
+
 use base64::{Engine, prelude::BASE64_STANDARD};
 use url::Url;
 
 use crate::{
-    common::parsers::protocols::{ss::Shadowsocks, vless::Vless},
+    common::parsers::protocols::{ss::Shadowsocks, trojan::Trojan, vless::Vless},
     http::models::xray_config::ExtraOutboundClientConfig,
 };
 
@@ -19,8 +21,13 @@ impl From<base64::DecodeError> for ParseError {
         ParseError::Base64DecodeError(err)
     }
 }
-impl From<std::string::FromUtf8Error> for ParseError {
-    fn from(err: std::string::FromUtf8Error) -> Self {
+impl From<String> for ParseError {
+    fn from(err: String) -> Self {
+        ParseError::FieldMissing(err)
+    }
+}
+impl From<FromUtf8Error> for ParseError {
+    fn from(err: FromUtf8Error) -> Self {
         ParseError::Utf8Error(err)
     }
 }
@@ -53,6 +60,7 @@ where
 pub enum OutboundClientConfig {
     Vless(Vless),
     Shadowsocks(Shadowsocks),
+    Trojan(Trojan),
 }
 
 pub trait ClientConfigCommon {
@@ -67,6 +75,7 @@ impl ClientConfigCommon for OutboundClientConfig {
         match self {
             OutboundClientConfig::Vless(vless_config) => vless_config.address(),
             OutboundClientConfig::Shadowsocks(shadowsocks_config) => shadowsocks_config.address(),
+            OutboundClientConfig::Trojan(trojan_config) => trojan_config.address(),
         }
     }
 
@@ -74,6 +83,7 @@ impl ClientConfigCommon for OutboundClientConfig {
         match self {
             OutboundClientConfig::Vless(vless_config) => vless_config.port(),
             OutboundClientConfig::Shadowsocks(shadowsocks_config) => shadowsocks_config.port(),
+            OutboundClientConfig::Trojan(trojan_config) => trojan_config.port(),
         }
     }
 
@@ -81,6 +91,7 @@ impl ClientConfigCommon for OutboundClientConfig {
         match self {
             OutboundClientConfig::Vless(vless) => vless.protocol(),
             OutboundClientConfig::Shadowsocks(ss) => ss.protocol(),
+            OutboundClientConfig::Trojan(trojan) => trojan.protocol(),
         }
     }
 
@@ -88,6 +99,7 @@ impl ClientConfigCommon for OutboundClientConfig {
         match self {
             OutboundClientConfig::Vless(vless) => vless.extra(),
             OutboundClientConfig::Shadowsocks(ss) => ss.extra(),
+            OutboundClientConfig::Trojan(trojan) => trojan.extra(),
         }
     }
 }
@@ -147,6 +159,9 @@ fn parse_line(url: Url) -> Result<OutboundClientConfig, String> {
             .map_err(|err| format!("{}", err)),
         "ss" => Shadowsocks::parse(&url)
             .map(OutboundClientConfig::Shadowsocks)
+            .map_err(|err| format!("{}", err)),
+        "trojan" => Trojan::parse(&url)
+            .map(OutboundClientConfig::Trojan)
             .map_err(|err| format!("{}", err)),
         other => Err(format!("unknown url scheme: \"{other}\"")),
     }

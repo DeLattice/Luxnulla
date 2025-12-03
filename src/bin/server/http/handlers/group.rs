@@ -10,7 +10,7 @@ use url::Url;
 use crate::{
     http::server::AppState,
     services::{
-        db::transaction::{run_db_transaction, run_transaction},
+        db::transaction::run_db_transaction,
         repository::group::{GroupModel, GroupRepository},
     },
 };
@@ -56,7 +56,7 @@ pub async fn create_group(
             Json(json!({"error": e.to_string()})),
         )
             .into_response(),
-    };
+    }
 }
 
 #[derive(serde::Serialize)]

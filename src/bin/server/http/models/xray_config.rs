@@ -2,7 +2,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::common::parsers::{
     outbound::{ClientConfigCommon, OutboundClientConfig},
-    protocols::{ss::ShadowsocksClientConfigAccessor, vless::VlessClientConfigAccessor},
+    protocols::{
+        ss::ShadowsocksClientConfigAccessor, trojan::TrojanClientConfigAccessor,
+        vless::VlessClientConfigAccessor,
+    },
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -110,13 +113,31 @@ pub struct ShadowsocksServer {
     password: String,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TrojanServer {
+    address: String,
+    port: u16,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    flow: Option<String>,
+
+    password: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(untagged)]
+pub enum Server {
+    Shadowsocks(ShadowsocksServer),
+    Trojan(TrojanServer),
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Settings {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vnext: Option<Vec<VNext>>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub servers: Option<Vec<ShadowsocksServer>>,
+    pub servers: Option<Vec<Server>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -129,6 +150,7 @@ pub struct User {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct StreamSettings {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub network: Option<String>,
@@ -136,22 +158,13 @@ pub struct StreamSettings {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub security: Option<String>,
 
-    #[serde(
-        skip_serializing_if = "Option::is_none",
-        rename(serialize = "grpcSettings", deserialize = "grpcSettings")
-    )]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub grpc: Option<GRPCSettings>,
 
-    #[serde(
-        skip_serializing_if = "Option::is_none",
-        rename(serialize = "realitySettings", deserialize = "realitySettings")
-    )]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub reality: Option<RealitySettings>,
 
-    #[serde(
-        skip_serializing_if = "Option::is_none",
-        rename(serialize = "tlsSettings", deserialize = "tlsSettings")
-    )]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tls: Option<TlsSettings>,
 }
 
@@ -200,12 +213,23 @@ impl XrayOutboundClientConfig {
             protocol: config.protocol().to_string(),
             settings: Settings {
                 servers: match config {
-                    OutboundClientConfig::Shadowsocks(ss_config) => Some(vec![ShadowsocksServer {
-                        address: ss_config.address().to_string(),
-                        port: ss_config.port(),
-                        method: ss_config.method().to_string(),
-                        password: ss_config.password().to_string(),
-                    }]),
+                    OutboundClientConfig::Shadowsocks(ss_config) => {
+                        Some(vec![Server::Shadowsocks(ShadowsocksServer {
+                            address: ss_config.address().to_string(),
+                            port: ss_config.port(),
+                            method: ss_config.method().to_string(),
+                            password: ss_config.password().to_string(),
+                        })])
+                    }
+
+                    OutboundClientConfig::Trojan(tr_config) => {
+                        Some(vec![Server::Trojan(TrojanServer {
+                            address: tr_config.address().to_string(),
+                            port: tr_config.port(),
+                            flow: tr_config.flow().map(|flow| flow.to_string()),
+                            password: tr_config.password().to_string(),
+                        })])
+                    }
                     _ => None,
                 },
                 vnext: match config {
@@ -243,11 +267,17 @@ impl XrayOutboundClientConfig {
                     OutboundClientConfig::Shadowsocks(ss_config) => {
                         ss_config.network().map(|e| e.to_string())
                     }
+                    OutboundClientConfig::Trojan(tr_config) => {
+                        tr_config.network().map(|e| e.to_string())
+                    }
                     _ => None,
                 },
                 security: match config {
                     OutboundClientConfig::Vless(vless_config) => {
                         vless_config.security().map(|e| e.to_string())
+                    }
+                    OutboundClientConfig::Trojan(tr_config) => {
+                        tr_config.security().map(|e| e.to_string())
                     }
                     _ => None,
                 },
