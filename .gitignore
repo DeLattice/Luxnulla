@@ -9,4 +9,4 @@
 .cargo
 target
 
-/static
+/static/*
